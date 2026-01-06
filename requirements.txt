@@ -1,0 +1,12 @@
+neo4j>=5.0.0
+chromadb>=0.4.0
+langchain
+langchain-community
+langchain-google-genai
+crewai
+pydantic
+fastapi
+uvicorn
+python-dotenv
+numpy
+pandas

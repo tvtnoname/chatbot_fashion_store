@@ -1,0 +1,25 @@
+# General
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.DS_Store
+.vscode/
+.idea/
+
+# Environment
+.env
+venv/
+.venv/
+env/
+
+# Data (Docker Volumes)
+data/neo4j/
+data/chroma/
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
