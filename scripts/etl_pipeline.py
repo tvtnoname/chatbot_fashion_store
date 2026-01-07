@@ -33,8 +33,8 @@ class LLMTagger:
         if not api_key:
             logging.warning("GOOGLE_API_KEY chưa được set. Auto-tagging có thể thất bại.")
         
-        # Switched to Gemini 1.5 Flash
-        self.llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+        # Switched to Gemini 2.0 Flash
+        self.llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
         self.parser = JsonOutputParser(pydantic_object=ProductAttributes)
         
         self.prompt = ChatPromptTemplate.from_messages([
@@ -144,6 +144,8 @@ class VectorStore:
                 self.lc_embeddings = langchain_embeddings
             def __call__(self, input: List[str]) -> List[List[float]]:
                 return self.lc_embeddings.embed_documents(input)
+            def name(self):
+                return "google_gemini"
 
         self.lc_embed_model = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
         self.embedding_fn = ChromaEmbeddingAdapter(self.lc_embed_model)

@@ -40,6 +40,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: fashion_agent_core
+    ports:
+      - "8080:8000"
     volumes:
       - .:/app
     environment:
