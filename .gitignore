@@ -1,25 +1,39 @@
-# General
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.DS_Store
-# .vscode/
+
+# Virtual Environment
+~/fashion_env/
+venv/
+env/
+
+# IDE
+.vscode/
 .idea/
+*.swp
 
 # Environment
 .env
-venv/
-.venv/
-env/
+.env.local
 
-# Data (Docker Volumes)
-data/neo4j/
-data/chroma/
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+
+# Test outputs
+test_result*.png
+vto_result*.png
+
+# Data
+data/
 
 # Logs
 *.log
-logs/
 
-# Testing
-.pytest_cache/
+# OS
+.DS_Store
+Thumbs.db

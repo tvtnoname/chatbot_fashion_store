@@ -1,9 +1,11 @@
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
 from .dtos import ChatRequest, ChatResponse, ImageAnalysisResult, ProductRecommendation
+from .vto_dtos import VTOResponse, VTORequest
+from .vto_service import call_vto_api
 from .main import run_fashion_consultant
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
@@ -83,3 +85,77 @@ async def chat_endpoint(request: ChatRequest):
         )
     except Exception as e:
          raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/virtual-try-on", response_model=VTOResponse)
+async def virtual_try_on(
+    user_photo: UploadFile = File(..., description="User's photo (max 10MB)"),
+    garment_photo: UploadFile = File(..., description="Garment photo (max 10MB)"),
+    category: str = Form("upperbody", description="upperbody, lowerbody, or dress"),
+    mode: str = Form("hd", description="hd or dc")
+):
+    """
+    Virtual Try-On endpoint
+    
+    Upload user photo and garment photo to generate a try-on result.
+    Processing time: 10-15 seconds.
+    """
+    
+    # File size validation (10MB max)
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB in bytes
+    
+    try:
+        # Read user photo
+        user_photo_bytes = await user_photo.read()
+        if len(user_photo_bytes) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"User photo too large. Maximum size is 10MB."
+            )
+        
+        # Read garment photo
+        garment_photo_bytes = await garment_photo.read()
+        if len(garment_photo_bytes) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Garment photo too large. Maximum size is 10MB."
+            )
+        
+        # Validate category
+        valid_categories = ["upperbody", "lowerbody", "dress"]
+        if category not in valid_categories:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid category. Must be one of: {', '.join(valid_categories)}"
+            )
+        
+        # Validate mode
+        valid_modes = ["hd", "dc"]
+        if mode not in valid_modes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid mode. Must be one of: {', '.join(valid_modes)}"
+            )
+        
+        # Create request settings
+        settings = VTORequest(
+            category=category,
+            mode=mode,
+            skip_preprocessing=False
+        )
+        
+        # Call VTO service
+        result = call_vto_api(
+            user_photo=user_photo_bytes,
+            garment_photo=garment_photo_bytes,
+            settings=settings
+        )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Virtual try-on processing failed: {str(e)}"
+        )

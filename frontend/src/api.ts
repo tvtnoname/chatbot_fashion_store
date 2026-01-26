@@ -1,6 +1,6 @@
 // import axios from 'axios'; // Removed to fix crash
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = 'http://localhost:5000';
 
 export interface ImageAnalysisResult {
     category: string;
@@ -20,6 +20,21 @@ export interface ProductRecommendation {
 export interface ChatResponse {
     response: string;
     products: ProductRecommendation[];
+}
+
+export interface VTORequest {
+    userPhoto: File;
+    garmentPhoto: File;
+    category?: 'upperbody' | 'lowerbody' | 'dress';
+    mode?: 'hd' | 'dc';
+}
+
+export interface VTOResponse {
+    success: boolean;
+    image_data?: string; // Base64 encoded PNG
+    error?: string;
+    request_id?: string;
+    processing_time?: string;
 }
 
 export const api = {
@@ -67,6 +82,32 @@ export const api = {
             return data;
         } catch (error) {
             console.error("Upload API Error:", error);
+            throw error;
+        }
+    },
+
+    virtualTryOn: async (request: VTORequest): Promise<VTOResponse> => {
+        try {
+            const formData = new FormData();
+            formData.append('user_photo', request.userPhoto);
+            formData.append('garment_photo', request.garmentPhoto);
+            formData.append('category', request.category || 'upperbody');
+            formData.append('mode', request.mode || 'hd');
+
+            const response = await fetch(`${API_BASE_URL}/api/virtual-try-on`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || `VTO Error: ${response.statusText}`);
+            }
+
+            const data: VTOResponse = await response.json();
+            return data;
+        } catch (error) {
+            console.error("VTO API Error:", error);
             throw error;
         }
     }

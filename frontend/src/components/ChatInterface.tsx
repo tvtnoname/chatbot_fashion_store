@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Send, Loader2, ShoppingBag } from 'lucide-react';
+import { Send, Loader2, ShoppingBag, Sparkles } from 'lucide-react';
 import { api, type ChatResponse, type ImageAnalysisResult } from '../api';
 import MessageBubble from './MessageBubble';
 import ImageUpload from './ImageUpload';
+import VirtualTryOn from './VirtualTryOn';
 
 interface Message {
     id: string;
@@ -18,6 +19,7 @@ export default function ChatInterface() {
     const [isLoading, setIsLoading] = useState(false);
     const [imageContext, setImageContext] = useState<ImageAnalysisResult | undefined>(undefined);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [showVTO, setShowVTO] = useState(false);
 
     const handleSendMessage = async () => {
         if (!inputText.trim() && !imageContext) return;
@@ -99,6 +101,13 @@ export default function ChatInterface() {
                     <ShoppingBag className="w-6 h-6" />
                     Fashion AI Stylist
                 </h1>
+                <button
+                    onClick={() => setShowVTO(true)}
+                    className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2 rounded-full hover:from-purple-700 hover:to-pink-700 transition-all transform hover:scale-105 shadow-md"
+                >
+                    <Sparkles className="w-5 h-5" />
+                    <span className="font-semibold">Virtual Try-On</span>
+                </button>
             </header>
 
             {/* Messages */}
@@ -141,6 +150,9 @@ export default function ChatInterface() {
                     </button>
                 </div>
             </div>
+
+            {/* VTO Modal */}
+            {showVTO && <VirtualTryOn onClose={() => setShowVTO(false)} />}
         </div>
     );
 }
