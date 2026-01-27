@@ -1,39 +1,22 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
+*.egg-info/
 
 # Virtual Environment
-~/fashion_env/
 venv/
 env/
+.env
 
 # IDE
 .vscode/
 .idea/
 *.swp
 
-# Environment
-.env
-.env.local
-
-# Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/build/
-frontend/.next/
-
-# Test outputs
-test_result*.png
-vto_result*.png
-
-# Data
-data/
-
-# Logs
-*.log
-
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log

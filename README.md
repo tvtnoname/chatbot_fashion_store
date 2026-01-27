@@ -1,90 +1,57 @@
-# Fashion Store - AI Virtual Try-On
+# Fashion Store - AI Consultant Service
 
-E-commerce fashion store with AI-powered virtual try-on and fashion consultant.
+Backend service for the Fashion Store AI Consultant.
+Powered by Google Gemini and VTO (Virtual Try-On) integration.
 
-## Structure
+## 📁 Structure
 
 ```
-fashion_store/
-├── src/fashion_store/    # Backend API
-├── frontend/             # React frontend
-├── scripts/              # Helper scripts
-└── requirements.txt      # Python dependencies
+chatbot_fashion_store/
+├── src/fashion_store/    # Backend API (FastAPI/LangChain)
+├── requirements.txt      # Python dependencies
+└── .env                  # Configuration
 ```
 
-## Quick Start
+## 🚀 Installation
 
-### Backend (WSL Terminal)
+### 1. Prerequisites
+- Python 3.10+
+- Google Gemini API Key
+
+### 2. Setup
 
 ```bash
-cd /mnt/e/AI_Agent/fashion_store/
+cd chatbot_fashion_store
 
 # Create virtual environment
-python3 -m venv ~/fashion_env
-source ~/fashion_env/bin/activate
+python3 -m venv venv
+# Windows
+venv\Scripts\activate
+# Linux/Mac
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Run API server
-uvicorn src.fashion_store.api:app --port 5000 --reload
 ```
 
-**API**: http://localhost:5000  
-**Docs**: http://localhost:5000/docs
+## ⚙️ Configuration
 
-### Frontend (Windows Terminal)
+Create a `.env` file:
 
-```bash  
-cd E:\AI_Agent\fashion_store\frontend
-
-# Install dependencies
-npm install
-
-# Run dev server
-npm run dev
-```
-
-**Frontend**: http://localhost:3000
-
-## Features
-
-- 🤖 AI Fashion Consultant (Gemini-powered agents)
-- 👔 Virtual Try-On integration
-- 🛍️ Product catalog
-- 💬 Chat-based recommendations
-
-## API Endpoints
-
-```
-POST /api/virtual-try-on  - VTO endpoint
-POST /api/chat            - AI consultant
-GET  /api/products        - Product list
-GET  /health              - Health check
-```
-
-## Configuration
-
-Edit `.env`:
-```bash
+```env
+GEMINI_API_KEY=your_gemini_key_here
 VTO_API_URL=http://localhost:8000
-GEMINI_API_KEY=your_key_here
+PORT=5000
 ```
 
-## Architecture
-
-```
-Frontend (3000) → Backend API (5000) → VTO API (8000) → OOTDiffusion (7865)
-```
-
-## Development
-
-**Backend hot reload**: Uvicorn auto-reloads on file changes  
-**Frontend hot reload**: Vite HMR enabled
-
-## Testing
+## ▶️ Running the Service
 
 ```bash
-# Test VTO endpoint
-python test_vto_ngrok.py user.jpg garment.jpg
+# Run with uvicorn
+uvicorn src.fashion_store.api:app --host 0.0.0.0 --port 5000 --reload
 ```
+
+## 📡 API Endpoints
+
+- **POST `/api/chat`**: Chat with the AI consultant.
+- **GET `/health`**: Health check.
