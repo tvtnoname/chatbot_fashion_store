@@ -40,7 +40,6 @@ Create a `.env` file:
 
 ```env
 GEMINI_API_KEY=your_gemini_key_here
-VTO_API_URL=http://localhost:8000
 PORT=5000
 ```
 
