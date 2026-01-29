@@ -45,22 +45,67 @@ def vector_search(query: str) -> str:
         query: Mô tả sản phẩm cần tìm (ví dụ: 'áo sơ mi trắng đi biển')
     
     Returns:
-        JSON string chứa danh sách sản phẩm phù hợp
+        JSON string chứa danh sách sản phẩm phù hợp đã được kiểm tra tình trạng active
     """
     try:
         vectorstore = get_vectorstore()
-        docs_and_scores = vectorstore.similarity_search_with_score(query, k=5)
+        docs_and_scores = vectorstore.similarity_search_with_score(query, k=10) # Fetch more to filter down
         
         products = []
+        import requests
+        
+        # Helper to check product status via API
+        # Assuming backend is accessible at localhost:8000
+        # In Docker, this might need 'http://backend:8000'
+        # defaulting to localhost check for local dev environment
+        API_BASE_URL = os.getenv("BACKEND_API_URL", "http://localhost:8000/api/v1")
+        
         for doc, score in docs_and_scores:
             meta = doc.metadata
-            products.append({
-                "id": meta.get("product_id", "Unknown"),
-                "name": meta.get("name", "Unknown"),
-                "price": meta.get("price", 0),
-                "style": meta.get("style", "Unknown"),
-                "similarity_score": round(1 - score, 2)
-            })
+            p_id = meta.get("product_id")
+            
+            if not p_id:
+                continue
+                
+            # --- STATUS CHECK ---
+            try:
+                # We simply call the public API which now filters by active/stock by default
+                # Or we can check specific details if we had an internal verify endpoint.
+                # For efficiency, we might want to batch check, but for now per-item check 
+                # ensures we get live stock status.
+                # Note: Calling /products/{id} might return 404 if active logic was applied there too,
+                # OR we might need to inspect the payload.
+                # Let's check `read_products` (list) vs `read_product` (detail).
+                # `read_product` (detail) uses Supabase directly and doesn't seem to enforce active check in previous code view.
+                # So we should ideally filter by calling the LIST endpoint with ID or checking detail manually.
+                
+                # Fast check using requests
+                # Let's just fetch the detail and check manually to be safe
+                res = requests.get(f"{API_BASE_URL}/products/{p_id}", timeout=2)
+                
+                if res.status_code == 200:
+                    data = res.json()
+                    product_info = data.get("product", {})
+                    total_stock = data.get("total_stock", 0)
+                    is_active = product_info.get("is_active", False)
+                    
+                    if is_active and total_stock > 0:
+                        products.append({
+                            "id": p_id,
+                            "name": meta.get("name", "Unknown"),
+                            "price": meta.get("price", 0),
+                            "style": meta.get("style", "Unknown"),
+                            "similarity_score": round(1 - score, 2),
+                            "stock": total_stock # Useful context for AI
+                        })
+            except Exception as e:
+                # If API fail, we might skip to be safe, or include with warning. 
+                # Let's skip to ensure high quality results.
+                # print(f"Check failed for {p_id}: {e}")
+                pass
+            
+            if len(products) >= 5: # Stop once we have 5 valid items
+                break
         
         return json.dumps(products, ensure_ascii=False, indent=2)
     except Exception as e:
@@ -111,10 +156,15 @@ def graph_query(query: str) -> str:
     cypher_query = chain.invoke({"schema": SCHEMA_CONTEXT, "query": query}).strip()
     cypher_query = cypher_query.replace("```cypher", "").replace("```", "").strip()
     
-    # Execute query
-    uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    user = os.getenv("NEO4J_USER", "neo4j")
-    password = os.getenv("NEO4J_PASSWORD", "fashion_password")
+    # P0 Security: Require environment variables, no hardcoded defaults
+    uri = os.getenv("NEO4J_URI")
+    user = os.getenv("NEO4J_USER")
+    password = os.getenv("NEO4J_PASSWORD")
+    
+    if not all([uri, user, password]):
+        return json.dumps({
+            "error": "Neo4j configuration missing. Please set NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD environment variables."
+        }, ensure_ascii=False)
     
     try:
         driver = GraphDatabase.driver(uri, auth=(user, password))
