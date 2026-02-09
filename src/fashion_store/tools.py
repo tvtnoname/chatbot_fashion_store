@@ -37,6 +37,30 @@ def get_vectorstore():
     return _vectorstore
 
 # --- 1. Vector Search Tool ---
+# P1 FIX: Use concurrent API calls to fix N+1 query problem
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
+
+def _check_product_status(api_base_url: str, product_id: int, timeout: float = 2.0) -> dict:
+    """Helper to check single product status. Returns dict with product info or None."""
+    try:
+        res = requests.get(f"{api_base_url}/products/{product_id}", timeout=timeout)
+        if res.status_code == 200:
+            data = res.json()
+            product_info = data.get("product", {})
+            total_stock = data.get("total_stock", 0)
+            is_active = product_info.get("is_active", False)
+            
+            if is_active and total_stock > 0:
+                return {
+                    "id": product_id,
+                    "total_stock": total_stock,
+                    "is_valid": True
+                }
+        return {"id": product_id, "is_valid": False}
+    except Exception:
+        return {"id": product_id, "is_valid": False}
+
 @tool
 def vector_search(query: str) -> str:
     """Tìm kiếm sản phẩm thời trang dựa trên mô tả ngữ nghĩa.
@@ -49,62 +73,52 @@ def vector_search(query: str) -> str:
     """
     try:
         vectorstore = get_vectorstore()
-        docs_and_scores = vectorstore.similarity_search_with_score(query, k=10) # Fetch more to filter down
+        # Fetch more results initially to have buffer after filtering
+        docs_and_scores = vectorstore.similarity_search_with_score(query, k=15)
         
-        products = []
-        import requests
-        
-        # Helper to check product status via API
-        # Assuming backend is accessible at localhost:8000
-        # In Docker, this might need 'http://backend:8000'
-        # defaulting to localhost check for local dev environment
         API_BASE_URL = os.getenv("BACKEND_API_URL", "http://localhost:8000/api/v1")
         
+        # Extract product info from vector search results
+        candidates = []
         for doc, score in docs_and_scores:
             meta = doc.metadata
             p_id = meta.get("product_id")
-            
-            if not p_id:
-                continue
+            if p_id:
+                candidates.append({
+                    "id": p_id,
+                    "name": meta.get("name", "Unknown"),
+                    "price": meta.get("price", 0),
+                    "style": meta.get("style", "Unknown"),
+                    "similarity_score": round(1 - score, 2)
+                })
+        
+        if not candidates:
+            return json.dumps([], ensure_ascii=False)
+        
+        # P1 FIX: Batch check product status using ThreadPoolExecutor
+        # This runs all API calls concurrently instead of sequentially
+        product_ids = [c["id"] for c in candidates]
+        status_map = {}
+        
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {
+                executor.submit(_check_product_status, API_BASE_URL, pid): pid 
+                for pid in product_ids
+            }
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    status_map[result["id"]] = result
+        
+        # Filter and enrich results
+        products = []
+        for candidate in candidates:
+            status = status_map.get(candidate["id"], {})
+            if status.get("is_valid"):
+                candidate["stock"] = status.get("total_stock", 0)
+                products.append(candidate)
                 
-            # --- STATUS CHECK ---
-            try:
-                # We simply call the public API which now filters by active/stock by default
-                # Or we can check specific details if we had an internal verify endpoint.
-                # For efficiency, we might want to batch check, but for now per-item check 
-                # ensures we get live stock status.
-                # Note: Calling /products/{id} might return 404 if active logic was applied there too,
-                # OR we might need to inspect the payload.
-                # Let's check `read_products` (list) vs `read_product` (detail).
-                # `read_product` (detail) uses Supabase directly and doesn't seem to enforce active check in previous code view.
-                # So we should ideally filter by calling the LIST endpoint with ID or checking detail manually.
-                
-                # Fast check using requests
-                # Let's just fetch the detail and check manually to be safe
-                res = requests.get(f"{API_BASE_URL}/products/{p_id}", timeout=2)
-                
-                if res.status_code == 200:
-                    data = res.json()
-                    product_info = data.get("product", {})
-                    total_stock = data.get("total_stock", 0)
-                    is_active = product_info.get("is_active", False)
-                    
-                    if is_active and total_stock > 0:
-                        products.append({
-                            "id": p_id,
-                            "name": meta.get("name", "Unknown"),
-                            "price": meta.get("price", 0),
-                            "style": meta.get("style", "Unknown"),
-                            "similarity_score": round(1 - score, 2),
-                            "stock": total_stock # Useful context for AI
-                        })
-            except Exception as e:
-                # If API fail, we might skip to be safe, or include with warning. 
-                # Let's skip to ensure high quality results.
-                # print(f"Check failed for {p_id}: {e}")
-                pass
-            
-            if len(products) >= 5: # Stop once we have 5 valid items
+            if len(products) >= 5:
                 break
         
         return json.dumps(products, ensure_ascii=False, indent=2)
