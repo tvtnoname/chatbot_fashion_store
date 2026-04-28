@@ -12,11 +12,10 @@ class ChatRequest(BaseModel):
     image_context: Optional[ImageAnalysisResult] = None
 
 class ProductRecommendation(BaseModel):
-    id: str
+    id: int
     name: str
     price: float
-    reason: str
-    image_url: Optional[str] = None
+    similarity_score: Optional[float] = None
 
 class ChatResponse(BaseModel):
     response: str

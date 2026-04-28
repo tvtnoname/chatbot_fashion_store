@@ -1,8 +1,9 @@
-from typing import TypedDict, Annotated
+from typing import TypedDict, List, Optional
 from langgraph.graph import StateGraph, END
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
-from .tools import vector_search, graph_query
+from .tools import vector_search
+import json
 
 # LLM Configuration
 llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7)
@@ -12,7 +13,7 @@ class AgentState(TypedDict):
     user_query: str
     intent_analysis: str
     product_search_results: str
-    graph_query_results: str
+    recommended_product_ids: List[dict]  # [{id, name, price, similarity_score}, ...]
     final_response: str
 
 # Node 1: Intent Analysis
@@ -35,42 +36,33 @@ def intent_analysis_node(state: AgentState) -> AgentState:
     state["intent_analysis"] = response.content
     return state
 
-# Node 2: Product Search  
+# Node 2: Product Search (RAG via ChromaDB)
 def product_search_node(state: AgentState) -> AgentState:
-    """Tìm kiếm sản phẩm phù hợp"""
-    intent = state["intent_analysis"]
+    """Tìm kiếm sản phẩm phù hợp qua Vector Search"""
     query = state["user_query"]
     
     # Invoke vector search tool
     search_result = vector_search.invoke({"query": query})
     state["product_search_results"] = search_result
     
-    return state
-
-# Node 3: Graph Query (Optional - for matching items)
-def graph_knowledge_node(state: AgentState) -> AgentState:
-    """Tìm sản phẩm phối hợp từ Knowledge Graph"""
-    products = state.get("product_search_results", "")
-    
-    if products and products != "[]":
-        # Extract first product name to find matches
-        try:
-            import json
-            product_list = json.loads(products)
-            if product_list:
-                first_product = product_list[0]["name"]
-                graph_result = graph_query.invoke({
-                    "query": f"Tìm sản phẩm phối hợp với {first_product}"
-                })
-                state["graph_query_results"] = graph_result
-        except:
-            state["graph_query_results"] = "[]"
-    else:
-        state["graph_query_results"] = "[]"
+    # Extract product IDs for structured response
+    try:
+        products = json.loads(search_result)
+        state["recommended_product_ids"] = [
+            {
+                "id": p["id"],
+                "name": p.get("name", ""),
+                "price": p.get("price", 0),
+                "similarity_score": p.get("similarity_score", 0)
+            }
+            for p in products
+        ] if isinstance(products, list) else []
+    except (json.JSONDecodeError, TypeError):
+        state["recommended_product_ids"] = []
     
     return state
 
-# Node 4: Final Response Generation
+# Node 3: Final Response Generation
 def stylist_response_node(state: AgentState) -> AgentState:
     """Tạo lời khuyên stylist bằng tiếng Việt"""
     messages = [
@@ -83,15 +75,14 @@ def stylist_response_node(state: AgentState) -> AgentState:
             "4. Phong cách: Thân thiện, chuyên nghiệp, như một người bạn am hiểu thời trang. "
             "5. Không liệt kê dạng bullet points. Hãy kể câu chuyện về outfit. "
             "6. Giải thích TẠI SAO các món đồ hợp với nhau, dựa trên màu sắc, chất liệu, dịp. "
-            "7. Nếu có sản phẩm cụ thể từ database, hãy tự nhiên đề cập tên và giá."
+            "7. Nếu có sản phẩm cụ thể từ database, hãy tự nhiên đề cập tên và giá. "
+            "8. Nếu không tìm thấy sản phẩm phù hợp, hãy đưa ra lời khuyên chung về phong cách."
         )),
         HumanMessage(content=f"""Yêu cầu: {state['user_query']}
 
 Phân tích nhu cầu: {state['intent_analysis']}
 
-Sản phẩm tìm được: {state['product_search_results']}
-
-Sản phẩm phối hợp: {state.get('graph_query_results', '[]')}
+Sản phẩm tìm được từ cửa hàng: {state['product_search_results']}
 
 Hãy tư vấn một outfit hoàn chỉnh, viết tự nhiên như đang nhắn tin với bạn bè.""")
     ]
@@ -102,20 +93,18 @@ Hãy tư vấn một outfit hoàn chỉnh, viết tự nhiên như đang nhắn 
 
 # Build Graph
 def create_fashion_agent():
-    """Tạo LangGraph agent cho tư vấn thời trang"""
+    """Tạo LangGraph agent cho tư vấn thời trang (RAG cơ bản, không dùng Neo4j)"""
     workflow = StateGraph(AgentState)
     
-    # Add nodes
+    # Add nodes (3-node pipeline: intent → search → response)
     workflow.add_node("intent_analysis", intent_analysis_node)
     workflow.add_node("product_search", product_search_node)
-    workflow.add_node("graph_knowledge", graph_knowledge_node)
     workflow.add_node("stylist_response", stylist_response_node)
     
-    # Define edges
+    # Define edges (skip graph_knowledge - will add back in Phase 2 GraphRAG)
     workflow.set_entry_point("intent_analysis")
     workflow.add_edge("intent_analysis", "product_search")
-    workflow.add_edge("product_search", "graph_knowledge")
-    workflow.add_edge("graph_knowledge", "stylist_response")
+    workflow.add_edge("product_search", "stylist_response")
     workflow.add_edge("stylist_response", END)
     
     return workflow.compile()

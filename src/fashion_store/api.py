@@ -1,7 +1,6 @@
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
-import shutil
 import os
 from .dtos import ChatRequest, ChatResponse, ImageAnalysisResult, ProductRecommendation
 from .main import run_fashion_consultant
@@ -67,12 +66,25 @@ async def chat_endpoint(request: ChatRequest):
         user_query += f"\n\n[CONTEXT TỪ ẢNH]: Người dùng đang hỏi về một sản phẩm có đặc điểm: {ctx.category} màu {ctx.color}, chất liệu {ctx.material}, phong cách {ctx.style_description}. Hãy tư vấn cách phối đồ với món này."
     
     try:
-        # Run Chatbot Agent
-        final_output = run_fashion_consultant(user_query, return_json=False)
+        # Run Chatbot Agent - now returns dict with response + products
+        result = run_fashion_consultant(user_query)
+        
+        # Parse recommended products into structured response
+        products = []
+        for p in result.get("recommended_product_ids", []):
+            try:
+                products.append(ProductRecommendation(
+                    id=int(p["id"]),
+                    name=p.get("name", ""),
+                    price=float(p.get("price", 0)),
+                    similarity_score=p.get("similarity_score")
+                ))
+            except (ValueError, KeyError):
+                continue
         
         return ChatResponse(
-            response=str(final_output),
-            products=[] 
+            response=result["response"],
+            products=products
         )
     except Exception as e:
          raise HTTPException(status_code=500, detail=str(e))
