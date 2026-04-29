@@ -5,8 +5,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from .tools import vector_search
 import json
 
+import os
+
 # LLM Configuration
-llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7)
+api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.7, google_api_key=api_key)
 
 # State Definition
 class AgentState(TypedDict):

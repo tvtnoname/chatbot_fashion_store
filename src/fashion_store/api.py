@@ -20,7 +20,8 @@ app.add_middleware(
 )
 
 # Gemini for Vision
-vision_llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+vision_llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0, google_api_key=api_key)
 
 @app.get("/")
 async def root():
@@ -95,4 +96,6 @@ async def chat_endpoint(request: ChatRequest):
             products=products
         )
     except Exception as e:
+         import traceback
+         traceback.print_exc()
          raise HTTPException(status_code=500, detail=str(e))
