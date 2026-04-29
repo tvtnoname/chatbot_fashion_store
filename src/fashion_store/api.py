@@ -22,6 +22,14 @@ app.add_middleware(
 # Gemini for Vision
 vision_llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Fashion Stylist Agent API is running"}
+
+@app.get("/favicon.ico")
+async def favicon():
+    return {"status": "ok"}
+
 @app.post("/upload-image", response_model=ImageAnalysisResult)
 async def upload_image(file: UploadFile = File(...)):
     try:
