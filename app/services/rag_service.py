@@ -1,63 +1,78 @@
 import os
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain_community.llms import Ollama
-from langchain_core.prompts import PromptTemplate
+from langchain_community.chat_models import ChatOllama
+from langgraph.prebuilt import create_react_agent
+from langchain_core.messages import SystemMessage
+from langchain.tools.retriever import create_retriever_tool
+from app.tools.api_tools import check_inventory, check_order_status, cancel_order
 
 class RAGService:
     def __init__(self):
-        self.retriever = None
-        self.llm = None
-        self.prompt = None
+        self.agent_executor = None
 
     def initialize(self):
-        print("🔄 Loading RAG components...")
+        print("🔄 Loading AI Agent components...")
         
-        # 1. Embedding model
-        print("  → Loading HuggingFace Embeddings...")
+        # 1. Embedding & Vector Store (RAG Tool)
+        print("  → Loading HuggingFace Embeddings & ChromaDB...")
         embeddings = HuggingFaceEmbeddings(model_name="paraphrase-multilingual-MiniLM-L12-v2")
-        
-        # 2. ChromaDB vector store
         chroma_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "chroma_db")
-        print(f"  → Loading ChromaDB from {chroma_path}...")
         vector_store = Chroma(persist_directory=chroma_path, embedding_function=embeddings)
-        self.retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+        retriever = vector_store.as_retriever(search_kwargs={"k": 3})
         
-        # 3. Ollama LLM
-        print("  → Initializing Ollama LLM (llama3)...")
-        self.llm = Ollama(model="llama3")
-        
-        # 4. Prompt template
-        prompt_template = """Bạn là trợ lý chăm sóc khách hàng của cửa hàng thời trang.
-Dưới đây là các trích đoạn chính sách từ cửa hàng:
-{context}
-
-Dựa VÀO CHÍNH XÁC những thông tin trên (không tự bịa thêm thông tin), hãy trả lời câu hỏi của khách hàng bằng tiếng Việt một cách lịch sự, tự nhiên.
-Nếu trong thông tin trên không có câu trả lời, hãy nói rằng "Dạ em chưa có thông tin về vấn đề này. Mong quý khách liên hệ trực tiếp hotline để được hỗ trợ ạ."
-
-Câu hỏi của khách: {question}
-
-Trả lời:"""
-        self.prompt = PromptTemplate(
-            template=prompt_template,
-            input_variables=["context", "question"]
+        policy_tool = create_retriever_tool(
+            retriever,
+            "policy_retriever",
+            "Tìm kiếm và tra cứu các quy định, chính sách đổi trả, vận chuyển, thanh toán của cửa hàng. Bắt buộc phải dùng tool này khi khách hỏi về quy định, chính sách."
         )
-        print("✅ RAG components initialized!")
+        
+        # 2. Setup Tools
+        tools = [policy_tool, check_inventory, check_order_status, cancel_order]
+        
+        # 3. LLM Setup
+        print("  → Initializing ChatOllama (llama3) with Tool Calling...")
+        llm = ChatOllama(model="llama3", temperature=0)
+        
+        # 4. System Prompt (state_modifier in langgraph)
+        system_prompt = (
+            "Bạn là 'AI chăm sóc khách hàng' của một cửa hàng thời trang.\n"
+            "Luôn trả lời bằng tiếng Việt thân thiện, tự nhiên và lịch sự.\n"
+            "Bạn ĐƯỢC CUNG CẤP các công cụ (tools) để tra cứu thông tin (tồn kho, đơn hàng, quy định). Hãy chủ động gọi tool khi cần.\n"
+            "Dựa vào kết quả trả về của tool, hãy trả lời ngắn gọn, đúng trọng tâm cho khách hàng.\n"
+            "Nếu tool trả về lỗi hoặc không tìm thấy thông tin, hãy thành thật xin lỗi khách hàng và khuyên họ gọi Hotline."
+        )
+        
+        # 5. Agent Executor (langgraph)
+        self.agent_executor = create_react_agent(llm, tools=tools, state_modifier=system_prompt)
+        print("✅ AI Agent initialized with LangGraph!")
 
-    def get_answer(self, question: str) -> str:
-        if not self.retriever or not self.llm:
-            raise RuntimeError("RAG components are not initialized.")
+    def get_answer(self, question: str, user_id: int = None) -> str:
+        if not self.agent_executor:
+            raise RuntimeError("Agent components are not initialized.")
             
-        # 1. Retrieve relevant policy chunks
-        docs = self.retriever.invoke(question)
-        context = "\n\n".join([doc.page_content for doc in docs])
-        
-        # 2. Build final prompt
-        final_prompt = self.prompt.format(context=context, question=question)
-        
-        # 3. Generate response
-        response_text = self.llm.invoke(final_prompt)
-        return response_text
+        try:
+            # Chuyền user_id thực tế vào context
+            uid = user_id if user_id else "Chưa đăng nhập"
+            
+            # Khởi tạo messages cho langgraph
+            inputs = {
+                "messages": [
+                    ("user", f"[User ID: {uid}] {question}")
+                ]
+            }
+            
+            # stream_mode="values" để lấy state cuối cùng
+            response_state = self.agent_executor.invoke(inputs)
+            
+            # Lấy tin nhắn cuối cùng từ mảng messages
+            final_message = response_state["messages"][-1].content
+            return final_message
+        except Exception as e:
+            print(f"Agent execution error: {e}")
+            import traceback
+            traceback.print_exc()
+            return "Dạ hệ thống đang quá tải hoặc gặp lỗi. Anh/chị vui lòng thử lại sau nhé."
 
 # Singleton instance
 rag_service = RAGService()

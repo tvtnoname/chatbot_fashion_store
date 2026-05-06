@@ -15,7 +15,7 @@ async def chat_endpoint(request: ChatRequest):
         if not question:
             raise HTTPException(status_code=400, detail="Message cannot be empty")
             
-        response_text = rag_service.get_answer(question)
+        response_text = rag_service.get_answer(question, request.user_id)
         return ChatResponse(response=response_text)
         
     except HTTPException:
