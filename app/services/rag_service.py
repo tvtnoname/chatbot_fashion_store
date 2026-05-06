@@ -1,10 +1,9 @@
 import os
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain_community.chat_models import ChatOllama
+from langchain_ollama import ChatOllama
 from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import SystemMessage
-from langchain.tools.retriever import create_retriever_tool
 from app.tools.api_tools import check_inventory, check_order_status, cancel_order
 
 class RAGService:
@@ -21,14 +20,16 @@ class RAGService:
         vector_store = Chroma(persist_directory=chroma_path, embedding_function=embeddings)
         retriever = vector_store.as_retriever(search_kwargs={"k": 3})
         
-        policy_tool = create_retriever_tool(
-            retriever,
-            "policy_retriever",
-            "Tìm kiếm và tra cứu các quy định, chính sách đổi trả, vận chuyển, thanh toán của cửa hàng. Bắt buộc phải dùng tool này khi khách hỏi về quy định, chính sách."
-        )
+        from langchain_core.tools import tool
+        
+        @tool
+        def policy_retriever(query: str) -> str:
+            """Tìm kiếm và tra cứu các quy định, chính sách đổi trả, vận chuyển, thanh toán của cửa hàng. Bắt buộc phải dùng tool này khi khách hỏi về quy định, chính sách."""
+            docs = retriever.invoke(query)
+            return "\n\n".join([doc.page_content for doc in docs])
         
         # 2. Setup Tools
-        tools = [policy_tool, check_inventory, check_order_status, cancel_order]
+        tools = [policy_retriever, check_inventory, check_order_status, cancel_order]
         
         # 3. LLM Setup
         print("  → Initializing ChatOllama (llama3) with Tool Calling...")
@@ -44,7 +45,7 @@ class RAGService:
         )
         
         # 5. Agent Executor (langgraph)
-        self.agent_executor = create_react_agent(llm, tools=tools, state_modifier=system_prompt)
+        self.agent_executor = create_react_agent(llm, tools=tools, prompt=system_prompt)
         print("✅ AI Agent initialized with LangGraph!")
 
     def get_answer(self, question: str, user_id: int = None) -> str:
