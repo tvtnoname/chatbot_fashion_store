@@ -52,15 +52,3 @@ def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
     except Exception as e:
         return f"Lỗi kết nối tra cứu đơn hàng: {str(e)}"
 
-@tool
-def cancel_order(order_id: int, user_id: int) -> str:
-    """Hủy đơn hàng nếu khách hàng yêu cầu. Yêu cầu phải có order_id và user_id của khách."""
-    if not user_id:
-        return "Yêu cầu đăng nhập để thực hiện hủy đơn."
-        
-    try:
-        res = requests.post(f"{MAIN_BE_URL}/orders/{order_id}/cancel", json={"user_id": user_id}, timeout=10)
-        data = res.json()
-        return data.get("message", "Có lỗi xảy ra khi hủy đơn.")
-    except Exception as e:
-        return f"Lỗi kết nối hủy đơn: {str(e)}"

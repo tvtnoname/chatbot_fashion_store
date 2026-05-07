@@ -9,14 +9,17 @@ async def root():
     return {"status": "ok", "message": "Fashion Store RAG Chatbot API is running (Ollama + ChromaDB)"}
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+def chat_endpoint(request: ChatRequest):
     try:
         question = request.message.strip()
         if not question:
             raise HTTPException(status_code=400, detail="Message cannot be empty")
             
-        response_text = rag_service.get_answer(question, request.user_id)
-        return ChatResponse(response=response_text)
+        result = rag_service.get_answer(question, request.user_id, request.thread_id)
+        return ChatResponse(
+            response=result["response"],
+            thread_id=result.get("thread_id", ""),
+        )
         
     except HTTPException:
         raise
