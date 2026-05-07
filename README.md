@@ -45,7 +45,7 @@ chatbot_fashion_store/
 Khuyến nghị sử dụng môi trường ảo `.venv` để tránh xung đột thư viện:
 
 ```bash
-# Clone dự án (nếu mới clone về)
+# Clone dự án
 git clone https://github.com/your-username/chatbot_fashion_store.git
 cd chatbot_fashion_store
 

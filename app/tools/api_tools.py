@@ -1,8 +1,9 @@
 import requests
 from typing import Optional, Dict, Any
 from langchain_core.tools import tool
+import os
 
-MAIN_BE_URL = "http://localhost:5001/api/v1/internal/chatbot"
+MAIN_BE_URL = os.getenv("MAIN_BE_URL", "http://localhost:5001/api/v1/internal/chatbot")
 
 @tool
 def check_inventory(query: str, size: Optional[str] = None, color: Optional[str] = None) -> str:
@@ -45,7 +46,7 @@ def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
         data = res.json()
         if data.get("status") == "success":
             order = data.get("data", {})
-            return f"Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái hiện tại: {order.get('status')}. Tổng tiền: {order.get('total_amount')}đ. Mã vận đơn: {order.get('tracking_number') or 'Chưa có'}."
+            return f"Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái hiện tại: {order.get('status')}. Tổng tiền: {order.get('total_amount')}đ."
         else:
             return data.get("message", "Không tìm thấy đơn hàng.")
     except Exception as e:
