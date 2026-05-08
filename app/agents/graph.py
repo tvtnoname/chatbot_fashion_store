@@ -24,27 +24,49 @@ def build_multi_agent_graph():
     ops_agent = create_ops_agent()
     sales_agent = create_sales_agent()
 
+    # ── Helper: Lấy N cặp hỏi/đáp gần nhất + tin nhắn hiện tại ──
+    def _get_recent_messages(messages, max_pairs=2):
+        """Chỉ lấy vài cặp hỏi/đáp gần nhất để giữ ngữ cảnh ngắn hạn,
+        tránh nhiễu ngữ cảnh xuyên agent (cross-contamination)."""
+        # Luôn giữ tin nhắn cuối (câu hỏi hiện tại)
+        if not messages:
+            return messages
+        # Lọc chỉ giữ HumanMessage và AIMessage (bỏ ToolMessage, SystemMessage, ...)
+        filtered = [m for m in messages if getattr(m, "type", "") in ("human", "ai")]
+        # Giữ tối đa max_pairs*2 + 1 tin nhắn gần nhất
+        limit = max_pairs * 2 + 1
+        return filtered[-limit:] if len(filtered) > limit else filtered
+
+    def _sanitize_output(content: str) -> str:
+        """Nếu AI output JSON thô thay vì câu văn, thay bằng thông báo lỗi thân thiện."""
+        stripped = content.strip()
+        if stripped.startswith("{") and "name" in stripped and "parameters" in stripped:
+            return "Dạ, hệ thống đang xử lý yêu cầu của anh/chị nhưng gặp trục trặc nhỏ. Anh/chị vui lòng thử lại câu hỏi nhé! 🙏"
+        return content
+
     # ── Wrapper functions cho Sub-Agents ──
-    # Các hàm này nhận state, gọi sub-agent, rồi trả kết quả về dạng AIMessage.
 
     def support_node(state: AgentState) -> AgentState:
         """Gọi Support Agent xử lý câu hỏi chính sách."""
         print("  📋 [Support Agent] Processing...")
-        result = support_agent.invoke({"messages": state["messages"]})
+        recent = _get_recent_messages(state["messages"])
+        result = support_agent.invoke({"messages": recent})
         last_msg = result["messages"][-1]
-        return {"messages": [AIMessage(content=last_msg.content)]}
+        return {"messages": [AIMessage(content=_sanitize_output(last_msg.content))]}
 
     def ops_node(state: AgentState) -> AgentState:
         """Gọi Operations Agent xử lý câu hỏi đơn hàng."""
         print("  📦 [Operations Agent] Processing...")
-        result = ops_agent.invoke({"messages": state["messages"]})
+        recent = _get_recent_messages(state["messages"])
+        result = ops_agent.invoke({"messages": recent})
         last_msg = result["messages"][-1]
-        return {"messages": [AIMessage(content=last_msg.content)]}
+        return {"messages": [AIMessage(content=_sanitize_output(last_msg.content))]}
 
     def sales_node(state: AgentState) -> AgentState:
         """Gọi Sales Agent xử lý câu hỏi sản phẩm/tồn kho."""
         print("  🛍️ [Sales Agent] Processing...")
-        result = sales_agent.invoke({"messages": state["messages"]})
+        recent = _get_recent_messages(state["messages"])
+        result = sales_agent.invoke({"messages": recent})
         last_msg = result["messages"][-1]
 
         # Extract products from ToolMessages before discarding them
@@ -57,7 +79,7 @@ def build_multi_agent_graph():
                 except Exception:
                     pass
 
-        return {"messages": [AIMessage(content=last_msg.content)], "products": products}
+        return {"messages": [AIMessage(content=_sanitize_output(last_msg.content))], "products": products}
 
     def greeting_node(state: AgentState) -> AgentState:
         """Trả lời chào hỏi trực tiếp, không cần gọi sub-agent nào."""
