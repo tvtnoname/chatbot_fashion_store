@@ -2,6 +2,7 @@
 RAG Service - Tầng Service chính.
 """
 import uuid
+import json
 from app.agents.graph import build_multi_agent_graph
 
 
@@ -38,9 +39,21 @@ class RAGService:
             response_state = self.agent_graph.invoke(inputs, config)
 
             final_message = response_state["messages"][-1].content
+
+            products = []
+            for msg in reversed(response_state["messages"]):
+                if getattr(msg, "type", "") == "tool" and getattr(msg, "name", "") == "check_inventory":
+                    try:
+                        tool_data = json.loads(msg.content)
+                        products = tool_data.get("raw_products", [])
+                        break
+                    except:
+                        pass
+
             return {
                 "response": final_message,
                 "thread_id": tid,
+                "products": products
             }
         except Exception as e:
             print(f"Multi-Agent execution error: {e}")

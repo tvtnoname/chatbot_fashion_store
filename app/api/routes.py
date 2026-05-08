@@ -19,6 +19,7 @@ def chat_endpoint(request: ChatRequest):
         return ChatResponse(
             response=result["response"],
             thread_id=result.get("thread_id", ""),
+            products=result.get("products", [])
         )
         
     except HTTPException:

@@ -1,3 +1,4 @@
+import json
 import requests
 from typing import Optional, Dict, Any
 from langchain_core.tools import tool
@@ -20,16 +21,16 @@ def check_inventory(query: str, size: Optional[str] = None, color: Optional[str]
         if data.get("status") == "success":
             results = data.get("data", [])
             if not results:
-                return f"Không tìm thấy tồn kho cho: {query}"
+                return json.dumps({"text_summary": f"Không tìm thấy tồn kho cho: {query}", "raw_products": []}, ensure_ascii=False)
             
             output = []
             for item in results:
                 output.append(f"Sản phẩm: {item['product_name']} (SKU: {item['sku']}), Size: {item['size']}, Màu: {item['color']}, Tồn kho: {item['stock_qty']}, Giá: {item['price']}đ")
-            return "\n".join(output)
+            return json.dumps({"text_summary": "\n".join(output), "raw_products": results}, ensure_ascii=False)
         else:
-            return data.get("message", "Có lỗi khi tra cứu tồn kho.")
+            return json.dumps({"text_summary": data.get("message", "Có lỗi khi tra cứu tồn kho."), "raw_products": []}, ensure_ascii=False)
     except Exception as e:
-        return f"Lỗi kết nối tra cứu tồn kho: {str(e)}"
+        return json.dumps({"text_summary": f"Lỗi kết nối tra cứu tồn kho: {str(e)}", "raw_products": []}, ensure_ascii=False)
 
 @tool
 def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
