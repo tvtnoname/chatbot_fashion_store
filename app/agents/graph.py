@@ -30,22 +30,22 @@ def build_multi_agent_graph():
         """Gọi Support Agent xử lý câu hỏi chính sách."""
         print("  📋 [Support Agent] Processing...")
         result = support_agent.invoke({"messages": state["messages"]})
-        last_msg = result["messages"][-1]
-        return {"messages": [AIMessage(content=last_msg.content)]}
+        new_msgs = result["messages"][len(state["messages"]):]
+        return {"messages": new_msgs}
 
     def ops_node(state: AgentState) -> AgentState:
         """Gọi Operations Agent xử lý câu hỏi đơn hàng."""
         print("  📦 [Operations Agent] Processing...")
         result = ops_agent.invoke({"messages": state["messages"]})
-        last_msg = result["messages"][-1]
-        return {"messages": [AIMessage(content=last_msg.content)]}
+        new_msgs = result["messages"][len(state["messages"]):]
+        return {"messages": new_msgs}
 
     def sales_node(state: AgentState) -> AgentState:
         """Gọi Sales Agent xử lý câu hỏi sản phẩm/tồn kho."""
         print("  🛍️ [Sales Agent] Processing...")
         result = sales_agent.invoke({"messages": state["messages"]})
-        last_msg = result["messages"][-1]
-        return {"messages": [AIMessage(content=last_msg.content)]}
+        new_msgs = result["messages"][len(state["messages"]):]
+        return {"messages": new_msgs}
 
     def greeting_node(state: AgentState) -> AgentState:
         """Trả lời chào hỏi trực tiếp, không cần gọi sub-agent nào."""

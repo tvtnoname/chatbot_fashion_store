@@ -44,10 +44,15 @@ class RAGService:
             for msg in reversed(response_state["messages"]):
                 if getattr(msg, "type", "") == "tool" and getattr(msg, "name", "") == "check_inventory":
                     try:
-                        tool_data = json.loads(msg.content)
+                        content_str = msg.content
+                        if isinstance(content_str, list):
+                            # Sometime content is a list of strings
+                            content_str = "".join(str(c) for c in content_str)
+                        tool_data = json.loads(content_str)
                         products = tool_data.get("raw_products", [])
                         break
-                    except:
+                    except Exception as e:
+                        print(f"Error parsing check_inventory ToolMessage: {e}. Content: {msg.content}")
                         pass
 
             return {
