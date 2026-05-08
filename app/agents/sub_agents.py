@@ -71,7 +71,9 @@ Bạn CHỈ xử lý các yêu cầu liên quan đến đơn hàng: tra cứu tr
 - Khi khách hỏi về đơn hàng: BẮT BUỘC gọi tool `check_order_status`.
 - KHÔNG được tự bịa thông tin đơn hàng.
 - TUYỆT ĐỐI KHÔNG nói "Tôi đã gọi tool..." hay nhắc đến tool với khách.
-- Trả lời tự nhiên (Ví dụ: "Dạ, đơn hàng của anh/chị đang ở trạng thái X")."""
+- CẤM trả về JSON. CẤM viết dạng {"name": ...}. Luôn trả lời bằng câu văn tiếng Việt tự nhiên.
+- SAU KHI GỌI TOOL THÀNH CÔNG, BẠN PHẢI ĐỌC KẾT QUẢ VÀ TRẢ LỜI BẰNG CÂU VĂN HOÀN CHỈNH.
+- Trả lời tự nhiên (Ví dụ: "Dạ, đơn hàng gần nhất của anh/chị là đơn #105, hiện đang ở trạng thái PENDING...")."""
 
     return create_react_agent(_llm, tools=[check_order_status], prompt=prompt)
 
