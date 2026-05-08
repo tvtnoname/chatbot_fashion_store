@@ -2,6 +2,7 @@
 LangGraph Workflow - Đồ thị Multi-Agent chính.
 Kết nối Supervisor với các Sub-Agents thành một hệ thống điều phối hoàn chỉnh.
 """
+import json
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import AIMessage, HumanMessage
@@ -30,22 +31,33 @@ def build_multi_agent_graph():
         """Gọi Support Agent xử lý câu hỏi chính sách."""
         print("  📋 [Support Agent] Processing...")
         result = support_agent.invoke({"messages": state["messages"]})
-        new_msgs = result["messages"][len(state["messages"]):]
-        return {"messages": new_msgs}
+        last_msg = result["messages"][-1]
+        return {"messages": [AIMessage(content=last_msg.content)]}
 
     def ops_node(state: AgentState) -> AgentState:
         """Gọi Operations Agent xử lý câu hỏi đơn hàng."""
         print("  📦 [Operations Agent] Processing...")
         result = ops_agent.invoke({"messages": state["messages"]})
-        new_msgs = result["messages"][len(state["messages"]):]
-        return {"messages": new_msgs}
+        last_msg = result["messages"][-1]
+        return {"messages": [AIMessage(content=last_msg.content)]}
 
     def sales_node(state: AgentState) -> AgentState:
         """Gọi Sales Agent xử lý câu hỏi sản phẩm/tồn kho."""
         print("  🛍️ [Sales Agent] Processing...")
         result = sales_agent.invoke({"messages": state["messages"]})
-        new_msgs = result["messages"][len(state["messages"]):]
-        return {"messages": new_msgs}
+        last_msg = result["messages"][-1]
+
+        # Extract products from ToolMessages before discarding them
+        products = []
+        for msg in result["messages"]:
+            if getattr(msg, "type", "") == "tool" and getattr(msg, "name", "") == "check_inventory":
+                try:
+                    tool_data = json.loads(msg.content)
+                    products = tool_data.get("raw_products", [])
+                except Exception:
+                    pass
+
+        return {"messages": [AIMessage(content=last_msg.content)], "products": products}
 
     def greeting_node(state: AgentState) -> AgentState:
         """Trả lời chào hỏi trực tiếp, không cần gọi sub-agent nào."""

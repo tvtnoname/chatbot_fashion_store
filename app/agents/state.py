@@ -12,7 +12,9 @@ class AgentState(TypedDict):
     - messages: Lịch sử hội thoại (tự động nối thêm nhờ add_messages).
     - next: Tên của Agent tiếp theo sẽ xử lý (do Supervisor quyết định).
     - user_id: ID người dùng hiện tại, truyền xuyên suốt đồ thị.
+    - products: Danh sách sản phẩm trả về từ Sales Agent (không lưu vào messages).
     """
     messages: Annotated[list, add_messages]
     next: str
     user_id: str
+    products: list
