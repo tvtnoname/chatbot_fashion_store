@@ -40,7 +40,7 @@ def build_multi_agent_graph():
     def _sanitize_output(content: str) -> str:
         """Nếu AI output JSON thô thay vì câu văn, thay bằng thông báo lỗi thân thiện."""
         stripped = content.strip()
-        if stripped.startswith("{") and "name" in stripped and "parameters" in stripped:
+        if '{"name":' in stripped and '"parameters":' in stripped:
             return "Dạ, hệ thống đang xử lý yêu cầu của anh/chị nhưng gặp trục trặc nhỏ. Anh/chị vui lòng thử lại câu hỏi nhé! 🙏"
         return content
 
