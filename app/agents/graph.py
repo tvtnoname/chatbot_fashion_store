@@ -8,8 +8,12 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import AIMessage, HumanMessage
 from app.agents.state import AgentState
 from langchain_core.messages import SystemMessage
+from langchain_ollama import ChatOllama
 from app.agents.supervisor import create_supervisor_node
-from app.agents.sub_agents import create_support_agent, create_ops_agent, create_sales_agent, _llm
+from app.agents.sub_agents import create_support_agent, create_ops_agent, create_sales_agent
+
+# LLM riêng biệt cho greeting (khởi tạo 1 lần, không dùng chung với sub-agents để tránh xung đột)
+_greeting_llm = ChatOllama(model="llama3.1", temperature=0.7)
 
 # Prompt chào hỏi được khai báo 1 lần duy nhất (tránh tạo lại mỗi request)
 _GREETING_PROMPT = SystemMessage(content="""Bạn là AI chăm sóc khách hàng của cửa hàng thời trang. Luôn trả lời bằng tiếng Việt.
@@ -90,8 +94,8 @@ def build_multi_agent_graph():
     async def greeting_node(state: AgentState) -> AgentState:
         """Trả lời chào hỏi trực tiếp, không cần gọi sub-agent nào."""
         print("  👋 [Direct Response] Greeting...")
-        # Tái sử dụng LLM singleton từ sub_agents (không tạo mới mỗi lần)
-        result = await _llm.ainvoke([_GREETING_PROMPT, *state["messages"]])
+        # Dùng LLM riêng biệt cho greeting (không dùng chung với sub-agents)
+        result = await _greeting_llm.ainvoke([_GREETING_PROMPT, *state["messages"]])
         return {"messages": [AIMessage(content=result.content)]}
 
 
