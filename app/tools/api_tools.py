@@ -3,7 +3,7 @@ import requests
 from typing import Optional, Dict, Any
 from langchain_core.tools import tool
 import os
-from cachetools import cached, TTLCache
+from cachetools import TTLCache
 
 # Khởi tạo cache lưu trữ tối đa 100 kết quả trong 180 giây (3 phút)
 inventory_cache = TTLCache(maxsize=100, ttl=180)
@@ -14,9 +14,15 @@ order_cache = TTLCache(maxsize=50, ttl=60)
 MAIN_BE_URL = os.getenv("MAIN_BE_URL", "http://localhost:5001/api/v1/internal/chatbot")
 
 @tool
-@cached(cache=inventory_cache)
 def check_inventory(query: str, size: Optional[str] = None, color: Optional[str] = None) -> str:
     """Tra cứu tồn kho thực tế của sản phẩm dựa vào tên hoặc SKU, size, color."""
+    # ── Cache thủ công (tương thích với @tool decorator của LangChain) ──
+    cache_key = (query, size, color)
+    if cache_key in inventory_cache:
+        print(f"    ⚡ [Cache HIT] inventory: {cache_key}")
+        return inventory_cache[cache_key]
+    print(f"    🌐 [Cache MISS] inventory: {cache_key} → gọi API...")
+
     params = {"q": query}
     if size:
         params["size"] = size
@@ -29,24 +35,33 @@ def check_inventory(query: str, size: Optional[str] = None, color: Optional[str]
         if data.get("status") == "success":
             results = data.get("data", [])
             if not results:
-                return json.dumps({"text_summary": f"Không tìm thấy tồn kho cho: {query}", "raw_products": []}, ensure_ascii=False)
-            
-            output = []
-            for item in results:
-                output.append(f"Sản phẩm: {item['product_name']} (SKU: {item['sku']}), Size: {item['size']}, Màu: {item['color']}, Tồn kho: {item['stock_qty']}, Giá: {item['price']}đ")
-            return json.dumps({"text_summary": "\n".join(output), "raw_products": results}, ensure_ascii=False)
+                result = json.dumps({"text_summary": f"Không tìm thấy tồn kho cho: {query}", "raw_products": []}, ensure_ascii=False)
+            else:
+                output = []
+                for item in results:
+                    output.append(f"Sản phẩm: {item['product_name']} (SKU: {item['sku']}), Size: {item['size']}, Màu: {item['color']}, Tồn kho: {item['stock_qty']}, Giá: {item['price']}đ")
+                result = json.dumps({"text_summary": "\n".join(output), "raw_products": results}, ensure_ascii=False)
         else:
-            return json.dumps({"text_summary": data.get("message", "Có lỗi khi tra cứu tồn kho."), "raw_products": []}, ensure_ascii=False)
+            result = json.dumps({"text_summary": data.get("message", "Có lỗi khi tra cứu tồn kho."), "raw_products": []}, ensure_ascii=False)
     except Exception as e:
-        return json.dumps({"text_summary": f"Lỗi kết nối tra cứu tồn kho: {str(e)}", "raw_products": []}, ensure_ascii=False)
+        result = json.dumps({"text_summary": f"Lỗi kết nối tra cứu tồn kho: {str(e)}", "raw_products": []}, ensure_ascii=False)
+    
+    inventory_cache[cache_key] = result
+    return result
 
 @tool
-@cached(cache=order_cache)
 def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
     """Tra cứu trạng thái đơn hàng của khách hàng. Yêu cầu truyền đúng user_id. Truyền order_id nếu khách muốn hỏi một đơn cụ thể."""
     if not user_id:
         return "Yêu cầu đăng nhập để kiểm tra đơn hàng."
-        
+
+    # ── Cache thủ công ──
+    cache_key = (user_id, order_id)
+    if cache_key in order_cache:
+        print(f"    ⚡ [Cache HIT] order: {cache_key}")
+        return order_cache[cache_key]
+    print(f"    🌐 [Cache MISS] order: {cache_key} → gọi API...")
+
     params = {"user_id": user_id}
     if order_id:
         params["order_id"] = order_id
@@ -56,9 +71,11 @@ def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
         data = res.json()
         if data.get("status") == "success":
             order = data.get("data", {})
-            return f"Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái hiện tại: {order.get('status')}. Tổng tiền: {order.get('total_amount')}đ."
+            result = f"Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái hiện tại: {order.get('status')}. Tổng tiền: {order.get('total_amount')}đ."
         else:
-            return data.get("message", "Không tìm thấy đơn hàng.")
+            result = data.get("message", "Không tìm thấy đơn hàng.")
     except Exception as e:
-        return f"Lỗi kết nối tra cứu đơn hàng: {str(e)}"
-
+        result = f"Lỗi kết nối tra cứu đơn hàng: {str(e)}"
+    
+    order_cache[cache_key] = result
+    return result
