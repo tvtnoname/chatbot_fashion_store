@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# ── Cấu hình tối ưu Ollama (giảm tải RAM/CPU khi chạy local) ──
+# Tự giải phóng model khỏi RAM sau 5 phút không có request (mặc định Ollama giữ vĩnh viễn)
+export OLLAMA_KEEP_ALIVE="5m"
+# Giới hạn chỉ xử lý 1 request LLM tại một thời điểm (tránh nhân bản model trong RAM)
+export OLLAMA_NUM_PARALLEL=1
+
 # Khai báo link Backend trên Render của bạn (Thay <link_render_cua_ban> bằng link thật)
 export MAIN_BE_URL="https://fashion-store-api-4wz7.onrender.com/api/v1/internal/chatbot"
 

@@ -3,10 +3,18 @@ import requests
 from typing import Optional, Dict, Any
 from langchain_core.tools import tool
 import os
+from cachetools import cached, TTLCache
+
+# Khởi tạo cache lưu trữ tối đa 100 kết quả trong 180 giây (3 phút)
+inventory_cache = TTLCache(maxsize=100, ttl=180)
+
+# Khởi tạo cache cho đơn hàng: TTL ngắn hơn (60 giây) vì trạng thái đơn hàng thay đổi nhanh hơn tồn kho
+order_cache = TTLCache(maxsize=50, ttl=60)
 
 MAIN_BE_URL = os.getenv("MAIN_BE_URL", "http://localhost:5001/api/v1/internal/chatbot")
 
 @tool
+@cached(cache=inventory_cache)
 def check_inventory(query: str, size: Optional[str] = None, color: Optional[str] = None) -> str:
     """Tra cứu tồn kho thực tế của sản phẩm dựa vào tên hoặc SKU, size, color."""
     params = {"q": query}
@@ -33,6 +41,7 @@ def check_inventory(query: str, size: Optional[str] = None, color: Optional[str]
         return json.dumps({"text_summary": f"Lỗi kết nối tra cứu tồn kho: {str(e)}", "raw_products": []}, ensure_ascii=False)
 
 @tool
+@cached(cache=order_cache)
 def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
     """Tra cứu trạng thái đơn hàng của khách hàng. Yêu cầu truyền đúng user_id. Truyền order_id nếu khách muốn hỏi một đơn cụ thể."""
     if not user_id:

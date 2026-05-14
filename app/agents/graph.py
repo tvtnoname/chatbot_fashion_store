@@ -7,8 +7,14 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import AIMessage, HumanMessage
 from app.agents.state import AgentState
+from langchain_core.messages import SystemMessage
 from app.agents.supervisor import create_supervisor_node
-from app.agents.sub_agents import create_support_agent, create_ops_agent, create_sales_agent
+from app.agents.sub_agents import create_support_agent, create_ops_agent, create_sales_agent, _llm
+
+# Prompt chào hỏi được khai báo 1 lần duy nhất (tránh tạo lại mỗi request)
+_GREETING_PROMPT = SystemMessage(content="""Bạn là AI chăm sóc khách hàng của cửa hàng thời trang. Luôn trả lời bằng tiếng Việt.
+Khách hàng đang chào hỏi bạn. Hãy chào lại thân thiện, vui vẻ và gợi ý khách hỏi về sản phẩm, đơn hàng, hoặc chính sách.
+Trả lời ngắn gọn trong 2-3 câu. KHÔNG gọi bất kỳ tool nào. KHÔNG trả về JSON.""")
 
 
 def build_multi_agent_graph():
@@ -84,14 +90,8 @@ def build_multi_agent_graph():
     async def greeting_node(state: AgentState) -> AgentState:
         """Trả lời chào hỏi trực tiếp, không cần gọi sub-agent nào."""
         print("  👋 [Direct Response] Greeting...")
-        # Lấy tin nhắn gốc của khách để AI chào lại tự nhiên
-        from langchain_ollama import ChatOllama
-        from langchain_core.messages import SystemMessage
-        llm = ChatOllama(model="llama3.1", temperature=0.7)
-        greeting_prompt = SystemMessage(content="""Bạn là AI chăm sóc khách hàng của cửa hàng thời trang. Luôn trả lời bằng tiếng Việt.
-Khách hàng đang chào hỏi bạn. Hãy chào lại thân thiện, vui vẻ và gợi ý khách hỏi về sản phẩm, đơn hàng, hoặc chính sách.
-Trả lời ngắn gọn trong 2-3 câu. KHÔNG gọi bất kỳ tool nào. KHÔNG trả về JSON.""")
-        result = await llm.ainvoke([greeting_prompt, *state["messages"]])
+        # Tái sử dụng LLM singleton từ sub_agents (không tạo mới mỗi lần)
+        result = await _llm.ainvoke([_GREETING_PROMPT, *state["messages"]])
         return {"messages": [AIMessage(content=result.content)]}
 
 
