@@ -56,6 +56,62 @@ class RAGService:
                 "thread_id": tid,
             }
 
+    async def astream_answer(self, question: str, user_id: int = None, thread_id: str = None):
+        """
+        Stream câu trả lời từ AI theo từng chunk nhỏ.
+        """
+        if not self.agent_graph:
+            yield json.dumps({"error": "Agent components are not initialized."}) + "\n\n"
+            return
+
+        tid = thread_id or str(uuid.uuid4())
+        config = {"configurable": {"thread_id": tid}}
+        uid = user_id if user_id else "Chưa đăng nhập"
+
+        inputs = {
+            "messages": [
+                ("user", f"[User ID: {uid}] {question}")
+            ],
+            "next": "",
+            "user_id": str(uid),
+            "products": []
+        }
+
+        products = []
+        try:
+            async for event in self.agent_graph.astream_events(inputs, config, version="v1"):
+                kind = event["event"]
+                
+                # Bắt các chunk text từ LLM sinh ra
+                if kind == "on_chat_model_stream":
+                    chunk = event["data"]["chunk"]
+                    if getattr(chunk, "content", None):
+                        yield json.dumps({"chunk": chunk.content}) + "\n\n"
+                        
+                # Bắt sự kiện chạy tool xong để lấy danh sách sản phẩm
+                elif kind == "on_tool_end":
+                    if event.get("name") == "check_inventory":
+                        try:
+                            tool_data = json.loads(event["data"].get("output", "{}"))
+                            products = tool_data.get("raw_products", [])
+                        except Exception:
+                            pass
+
+            # Sau khi sinh text xong, đẩy chunk cuối chứa metadata (thread_id, products)
+            yield json.dumps({
+                "thread_id": tid,
+                "products": products,
+                "is_done": True
+            }) + "\n\n"
+
+        except Exception as e:
+            print(f"Streaming error: {e}")
+            import traceback
+            traceback.print_exc()
+            yield json.dumps({"chunk": "\n[Hệ thống quá tải, vui lòng thử lại sau]"}) + "\n\n"
+            yield json.dumps({"thread_id": tid, "products": [], "is_done": True}) + "\n\n"
+
+
 
 # Singleton instance
 rag_service = RAGService()

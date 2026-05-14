@@ -46,27 +46,27 @@ def build_multi_agent_graph():
 
     # ── Wrapper functions cho Sub-Agents ──
 
-    def support_node(state: AgentState) -> AgentState:
+    async def support_node(state: AgentState) -> AgentState:
         """Gọi Support Agent xử lý câu hỏi chính sách."""
         print("  📋 [Support Agent] Processing...")
         recent = _get_recent_messages(state["messages"])
-        result = support_agent.invoke({"messages": recent})
+        result = await support_agent.ainvoke({"messages": recent})
         last_msg = result["messages"][-1]
         return {"messages": [AIMessage(content=_sanitize_output(last_msg.content))]}
 
-    def ops_node(state: AgentState) -> AgentState:
+    async def ops_node(state: AgentState) -> AgentState:
         """Gọi Operations Agent xử lý câu hỏi đơn hàng."""
         print("  📦 [Operations Agent] Processing...")
         recent = _get_recent_messages(state["messages"])
-        result = ops_agent.invoke({"messages": recent})
+        result = await ops_agent.ainvoke({"messages": recent})
         last_msg = result["messages"][-1]
         return {"messages": [AIMessage(content=_sanitize_output(last_msg.content))]}
 
-    def sales_node(state: AgentState) -> AgentState:
+    async def sales_node(state: AgentState) -> AgentState:
         """Gọi Sales Agent xử lý câu hỏi sản phẩm/tồn kho."""
         print("  🛍️ [Sales Agent] Processing...")
         recent = _get_recent_messages(state["messages"])
-        result = sales_agent.invoke({"messages": recent})
+        result = await sales_agent.ainvoke({"messages": recent})
         last_msg = result["messages"][-1]
 
         # Extract products from ToolMessages before discarding them
@@ -81,7 +81,7 @@ def build_multi_agent_graph():
 
         return {"messages": [AIMessage(content=_sanitize_output(last_msg.content))], "products": products}
 
-    def greeting_node(state: AgentState) -> AgentState:
+    async def greeting_node(state: AgentState) -> AgentState:
         """Trả lời chào hỏi trực tiếp, không cần gọi sub-agent nào."""
         print("  👋 [Direct Response] Greeting...")
         # Lấy tin nhắn gốc của khách để AI chào lại tự nhiên
@@ -91,7 +91,7 @@ def build_multi_agent_graph():
         greeting_prompt = SystemMessage(content="""Bạn là AI chăm sóc khách hàng của cửa hàng thời trang. Luôn trả lời bằng tiếng Việt.
 Khách hàng đang chào hỏi bạn. Hãy chào lại thân thiện, vui vẻ và gợi ý khách hỏi về sản phẩm, đơn hàng, hoặc chính sách.
 Trả lời ngắn gọn trong 2-3 câu. KHÔNG gọi bất kỳ tool nào. KHÔNG trả về JSON.""")
-        result = llm.invoke([greeting_prompt, *state["messages"]])
+        result = await llm.ainvoke([greeting_prompt, *state["messages"]])
         return {"messages": [AIMessage(content=result.content)]}
 
 

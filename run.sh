@@ -12,4 +12,8 @@ echo "🚀 Đang khởi động FastAPI (Uvicorn)..."
 
 trap "echo '🛑 Đang tắt ngrok...'; kill $NGROK_PID" EXIT
 
+# Kích hoạt môi trường ảo (virtual environment)
+source .venv/bin/activate
+
+# Khởi động uvicorn server
 uvicorn app.main:app --host 0.0.0.0 --port 5000 --reload
