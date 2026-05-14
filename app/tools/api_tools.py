@@ -1,4 +1,5 @@
 import json
+import time
 import requests
 from typing import Optional, Dict, Any
 from langchain_core.tools import tool
@@ -30,7 +31,10 @@ def check_inventory(query: str, size: Optional[str] = None, color: Optional[str]
         params["color"] = color
         
     try:
+        t0 = time.time()
+        print(f"    📡 [API] Requesting: {MAIN_BE_URL}/inventory?{params}")
         res = requests.get(f"{MAIN_BE_URL}/inventory", params=params, timeout=10)
+        print(f"    ✅ [API] Response received in {time.time()-t0:.2f}s (status={res.status_code})")
         data = res.json()
         if data.get("status") == "success":
             results = data.get("data", [])
@@ -44,8 +48,10 @@ def check_inventory(query: str, size: Optional[str] = None, color: Optional[str]
         else:
             result = json.dumps({"text_summary": data.get("message", "Có lỗi khi tra cứu tồn kho."), "raw_products": []}, ensure_ascii=False)
     except Exception as e:
+        print(f"    ❌ [API] Error after {time.time()-t0:.2f}s: {e}")
         result = json.dumps({"text_summary": f"Lỗi kết nối tra cứu tồn kho: {str(e)}", "raw_products": []}, ensure_ascii=False)
     
+    print(f"    📦 [Tool] check_inventory done. Result length: {len(result)} chars")
     inventory_cache[cache_key] = result
     return result
 
@@ -67,7 +73,10 @@ def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
         params["order_id"] = order_id
         
     try:
+        t0 = time.time()
+        print(f"    📡 [API] Requesting: {MAIN_BE_URL}/orders?{params}")
         res = requests.get(f"{MAIN_BE_URL}/orders", params=params, timeout=10)
+        print(f"    ✅ [API] Response received in {time.time()-t0:.2f}s (status={res.status_code})")
         data = res.json()
         if data.get("status") == "success":
             order = data.get("data", {})
@@ -75,7 +84,9 @@ def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
         else:
             result = data.get("message", "Không tìm thấy đơn hàng.")
     except Exception as e:
+        print(f"    ❌ [API] Error after {time.time()-t0:.2f}s: {e}")
         result = f"Lỗi kết nối tra cứu đơn hàng: {str(e)}"
     
+    print(f"    📦 [Tool] check_order_status done. Result length: {len(result)} chars")
     order_cache[cache_key] = result
     return result

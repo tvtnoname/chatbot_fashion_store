@@ -78,25 +78,45 @@ class RAGService:
         }
 
         products = []
+        chunk_count = 0
         try:
-            async for event in self.agent_graph.astream_events(inputs, config, version="v1"):
+            print(f"    🔄 [Stream] Starting astream_events v2...")
+            async for event in self.agent_graph.astream_events(inputs, config, version="v2"):
                 kind = event["event"]
                 
                 # Bắt các chunk text từ LLM sinh ra
                 if kind == "on_chat_model_stream":
                     chunk = event["data"]["chunk"]
                     if getattr(chunk, "content", None):
+                        chunk_count += 1
+                        if chunk_count == 1:
+                            print(f"    ✍️ [Stream] First chunk received! Streaming started...")
                         yield json.dumps({"chunk": chunk.content}) + "\n\n"
+                        
+                # Thông báo khi bắt đầu gọi tool để UI không bị "treo"
+                elif kind == "on_tool_start":
+                    tool_name = event.get("name")
+                    if tool_name == "check_inventory":
+                        yield json.dumps({"chunk": "\n*[Đang kiểm tra kho hàng...]*\n"}) + "\n\n"
+                    elif tool_name == "check_order_status":
+                        yield json.dumps({"chunk": "\n*[Đang tra cứu hệ thống...]*\n"}) + "\n\n"
+                    elif tool_name == "policy_retriever":
+                        yield json.dumps({"chunk": "\n*[Đang tra cứu chính sách...]*\n"}) + "\n\n"
                         
                 # Bắt sự kiện chạy tool xong để lấy danh sách sản phẩm
                 elif kind == "on_tool_end":
                     if event.get("name") == "check_inventory":
                         try:
-                            tool_data = json.loads(event["data"].get("output", "{}"))
+                            output = event["data"].get("output", "")
+                            # v2: output có thể là string hoặc ToolMessage
+                            raw = output.content if hasattr(output, "content") else str(output)
+                            tool_data = json.loads(raw)
                             products = tool_data.get("raw_products", [])
+                            print(f"    🛒 [Stream] Got {len(products)} products from tool")
                         except Exception:
                             pass
 
+            print(f"    ✅ [Stream] Done. Total chunks sent: {chunk_count}")
             # Sau khi sinh text xong, đẩy chunk cuối chứa metadata (thread_id, products)
             yield json.dumps({
                 "thread_id": tid,
