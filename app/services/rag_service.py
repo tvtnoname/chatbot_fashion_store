@@ -61,7 +61,7 @@ class RAGService:
         Stream câu trả lời từ AI theo từng chunk nhỏ.
         """
         if not self.agent_graph:
-            yield json.dumps({"error": "Agent components are not initialized."}) + "\n\n"
+            yield "data: " + json.dumps({"error": "Agent components are not initialized."}) + "\n\n"
             return
 
         tid = thread_id or str(uuid.uuid4())
@@ -91,17 +91,17 @@ class RAGService:
                         chunk_count += 1
                         if chunk_count == 1:
                             print(f"    ✍️ [Stream] First chunk received! Streaming started...")
-                        yield json.dumps({"chunk": chunk.content}) + "\n\n"
+                        yield "data: " + json.dumps({"chunk": chunk.content}) + "\n\n"
                         
                 # Thông báo khi bắt đầu gọi tool để UI không bị "treo"
                 elif kind == "on_tool_start":
                     tool_name = event.get("name")
                     if tool_name == "check_inventory":
-                        yield json.dumps({"chunk": "\n*[Đang kiểm tra kho hàng...]*\n"}) + "\n\n"
+                        yield "data: " + json.dumps({"chunk": "\n*[Đang kiểm tra kho hàng...]*\n"}) + "\n\n"
                     elif tool_name == "check_order_status":
-                        yield json.dumps({"chunk": "\n*[Đang tra cứu hệ thống...]*\n"}) + "\n\n"
+                        yield "data: " + json.dumps({"chunk": "\n*[Đang tra cứu hệ thống...]*\n"}) + "\n\n"
                     elif tool_name == "policy_retriever":
-                        yield json.dumps({"chunk": "\n*[Đang tra cứu chính sách...]*\n"}) + "\n\n"
+                        yield "data: " + json.dumps({"chunk": "\n*[Đang tra cứu chính sách...]*\n"}) + "\n\n"
                         
                 # Bắt sự kiện chạy tool xong để lấy danh sách sản phẩm
                 elif kind == "on_tool_end":
@@ -118,7 +118,7 @@ class RAGService:
 
             print(f"    ✅ [Stream] Done. Total chunks sent: {chunk_count}")
             # Sau khi sinh text xong, đẩy chunk cuối chứa metadata (thread_id, products)
-            yield json.dumps({
+            yield "data: " + json.dumps({
                 "thread_id": tid,
                 "products": products,
                 "is_done": True
@@ -128,8 +128,8 @@ class RAGService:
             print(f"Streaming error: {e}")
             import traceback
             traceback.print_exc()
-            yield json.dumps({"chunk": "\n[Hệ thống quá tải, vui lòng thử lại sau]"}) + "\n\n"
-            yield json.dumps({"thread_id": tid, "products": [], "is_done": True}) + "\n\n"
+            yield "data: " + json.dumps({"chunk": "\n[Hệ thống quá tải, vui lòng thử lại sau]"}) + "\n\n"
+            yield "data: " + json.dumps({"thread_id": tid, "products": [], "is_done": True}) + "\n\n"
 
 
 
