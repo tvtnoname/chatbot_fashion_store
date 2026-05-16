@@ -3,11 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.api.routes import router as api_router
 from app.services.rag_service import rag_service
+from app.tools.api_tools import warm_inventory_cache
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize RAG components once when server starts."""
     rag_service.initialize()
+    # Pre-fetch sản phẩm phổ biến vào cache (chạy ngầm, không block server)
+    warm_inventory_cache()
     yield
     print("🛑 Shutting down RAG Chatbot API...")
 

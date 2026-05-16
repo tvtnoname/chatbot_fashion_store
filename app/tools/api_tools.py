@@ -14,6 +14,58 @@ order_cache = TTLCache(maxsize=50, ttl=60)
 
 MAIN_BE_URL = os.getenv("MAIN_BE_URL", "http://localhost:5001/api/v1/internal/chatbot")
 
+# ── Danh sách từ khóa phổ biến để warm cache khi server khởi động ──
+_WARM_QUERIES = ["áo", "quần", "váy", "giày", "phụ kiện"]
+
+
+def warm_inventory_cache():
+    """Pre-fetch các danh mục sản phẩm phổ biến vào cache khi server khởi động.
+    Chạy trên background thread để không block server startup."""
+    import threading
+
+    def _warm():
+        success = 0
+        print("🔥 [Cache Warming] Đang tải trước tồn kho phổ biến...")
+        for query in _WARM_QUERIES:
+            cache_key = (query, None, None)
+            if cache_key in inventory_cache:
+                continue  # Đã có trong cache (trường hợp reload)
+            try:
+                params = {"q": query}
+                res = requests.get(f"{MAIN_BE_URL}/inventory", params=params, timeout=15)
+                data = res.json()
+                if data.get("status") == "success":
+                    results = data.get("data", [])
+                    if results:
+                        output = []
+                        for item in results:
+                            output.append(
+                                f"Sản phẩm: {item['product_name']} (SKU: {item['sku']}), "
+                                f"Size: {item['size']}, Màu: {item['color']}, "
+                                f"Tồn kho: {item['stock_qty']}, Giá: {item['price']}đ"
+                            )
+                        result = json.dumps(
+                            {"text_summary": "\n".join(output), "raw_products": results},
+                            ensure_ascii=False,
+                        )
+                    else:
+                        result = json.dumps(
+                            {"text_summary": f"Không tìm thấy tồn kho cho: {query}", "raw_products": []},
+                            ensure_ascii=False,
+                        )
+                    inventory_cache[cache_key] = result
+                    success += 1
+                    print(f"    ✅ [Warm] '{query}' → {len(results)} sản phẩm cached")
+                else:
+                    print(f"    ⚠️ [Warm] '{query}' → API trả lỗi: {data.get('message')}")
+            except Exception as e:
+                print(f"    ❌ [Warm] '{query}' → Lỗi: {e}")
+        print(f"🔥 [Cache Warming] Hoàn tất! {success}/{len(_WARM_QUERIES)} danh mục đã cached.")
+
+    # Chạy trên background thread để không chặn server startup
+    thread = threading.Thread(target=_warm, daemon=True)
+    thread.start()
+
 @tool
 def check_inventory(query: str, size: Optional[str] = None, color: Optional[str] = None) -> str:
     """Tra cứu tồn kho thực tế của sản phẩm dựa vào tên hoặc SKU, size, color."""
