@@ -164,8 +164,8 @@ def check_inventory(query: str, size: Optional[str] = None, color: Optional[str]
     return result
 
 @tool
-def check_order_status(user_id: str, order_id: Optional[str] = None) -> str:
-    """Tra cứu trạng thái đơn hàng của khách hàng. Yêu cầu truyền đúng user_id (số nguyên). Truyền order_id nếu khách muốn hỏi một đơn cụ thể."""
+def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
+    """Tra cứu trạng thái đơn hàng của khách hàng. Yêu cầu truyền đúng user_id. Truyền order_id nếu khách muốn hỏi một đơn cụ thể."""
     # ── Validate & convert user_id ──
     try:
         uid = int(user_id)
