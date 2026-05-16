@@ -15,7 +15,7 @@ order_cache = TTLCache(maxsize=50, ttl=60)
 MAIN_BE_URL = os.getenv("MAIN_BE_URL", "http://localhost:5001/api/v1/internal/chatbot")
 
 # ── Danh sách từ khóa phổ biến để warm cache khi server khởi động ──
-_WARM_QUERIES = ["áo", "quần", "váy", "giày", "phụ kiện"]
+_WARM_QUERIES = ["áo", "quần"]
 
 
 def warm_inventory_cache():
@@ -90,13 +90,18 @@ def warm_order_cache(user_id: str):
             data = res.json()
             
             if data.get("status") == "success":
-                order = data.get("data", {})
-                result = f"Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái hiện tại: {order.get('status')}. Tổng tiền: {order.get('total_amount')}đ."
+                orders = data.get("data", [])
+                if isinstance(orders, dict):
+                    orders = [orders]
+                output = []
+                for order in orders:
+                    output.append(f"Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái hiện tại: {order.get('status')}. Tổng tiền: {order.get('total_amount')}đ.")
+                result = "\n".join(output) if output else "Không tìm thấy đơn hàng."
             else:
                 result = data.get("message", "Không tìm thấy đơn hàng.")
                 
             order_cache[cache_key] = result
-            print(f"    ✅ [Order Warm] Đã cache đơn hàng cho user {uid}")
+            print(f"    ✅ [Order Warm] Đã cache {len(orders) if 'orders' in locals() else 0} đơn hàng cho user {uid}")
         except Exception as e:
             print(f"    ❌ [Order Warm] Lỗi khi tải trước đơn hàng user {user_id}: {e}")
 
@@ -184,8 +189,13 @@ def check_order_status(user_id: str, order_id: Optional[str] = None) -> str:
         print(f"    ✅ [API] Response received in {time.time()-t0:.2f}s (status={res.status_code})")
         data = res.json()
         if data.get("status") == "success":
-            order = data.get("data", {})
-            result = f"Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái hiện tại: {order.get('status')}. Tổng tiền: {order.get('total_amount')}đ."
+            orders = data.get("data", [])
+            if isinstance(orders, dict):
+                orders = [orders]
+            output = []
+            for order in orders:
+                output.append(f"Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái hiện tại: {order.get('status')}. Tổng tiền: {order.get('total_amount')}đ.")
+            result = "\n".join(output) if output else "Không tìm thấy đơn hàng."
         else:
             result = data.get("message", "Không tìm thấy đơn hàng.")
     except Exception as e:
