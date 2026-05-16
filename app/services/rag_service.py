@@ -33,7 +33,10 @@ class RAGService:
                 "messages": [
                     ("user", f"[User ID: {uid}] {question}")
                 ],
-                "next": "",
+                "pending_agents": [],
+                "current_agent_index": 0,
+                "agent_responses": [],
+                "direct_response": "",
                 "user_id": str(uid),
                 "products": []
             }
@@ -59,7 +62,7 @@ class RAGService:
     async def astream_answer(self, question: str, user_id: int = None, thread_id: str = None):
         """
         Stream câu trả lời từ AI theo từng chunk nhỏ.
-        Chỉ stream output từ sub-agent (bỏ supervisor, bỏ tool-calling chunks).
+        Hỗ trợ Sequential Multi-Routing: stream output từ nhiều sub-agents tuần tự.
         """
         if not self.agent_graph:
             yield "data: " + json.dumps({"error": "Agent components are not initialized."}) + "\n\n"
@@ -73,33 +76,80 @@ class RAGService:
             "messages": [
                 ("user", f"[User ID: {uid}] {question}")
             ],
-            "next": "",
+            "pending_agents": [],
+            "current_agent_index": 0,
+            "agent_responses": [],
+            "direct_response": "",
             "user_id": str(uid),
             "products": []
         }
 
         products = []
         chunk_count = 0
-        # Track xem tool đã được gọi chưa (trong mỗi sub-agent)
+        # Track tool state PER sub-agent (reset khi chuyển agent)
         tool_was_called = False
-        # Track xem tool đã chạy xong chưa → chỉ stream LLM output SAU khi tool xong
         tool_finished = False
+        # Track agent hiện tại đang stream
+        current_streaming_node = None
+        # Track xem đã gửi separator giữa các agent chưa
+        agent_stream_count = 0
+        # Nodes nội bộ cần bỏ qua khi stream
+        SKIP_NODES = {"supervisor", "router_node", "synthesizer_node", "direct_response_node"}
+        # Agent nodes - dùng để gửi status khi chuyển agent
+        AGENT_NODES = {"ops_agent", "sales_agent", "support_agent"}
+        AGENT_STATUS = {
+            "ops_agent": "Đang tra cứu đơn hàng...",
+            "sales_agent": "Đang tìm kiếm sản phẩm...",
+            "support_agent": "Đang tra cứu chính sách...",
+        }
 
         try:
-            print(f"    🔄 [Stream] Starting astream_events v2...")
+            print(f"    🔄 [Stream] Starting astream_events v2 (Multi-Routing)...")
             async for event in self.agent_graph.astream_events(inputs, config, version="v2"):
                 kind = event["event"]
                 node_name = event.get("metadata", {}).get("langgraph_node", "")
 
+                # ── 0. Bắt direct_response (chào hỏi - không có LLM stream) ──
+                if kind == "on_chain_end" and node_name == "direct_response_node":
+                    try:
+                        output = event.get("data", {}).get("output", {})
+                        msgs = output.get("messages", [])
+                        if msgs:
+                            content = msgs[0].content if hasattr(msgs[0], "content") else str(msgs[0])
+                            chunk_count += 1
+                            print(f"    👋 [Stream] Direct response sent")
+                            yield "data: " + json.dumps({"chunk": content}) + "\n\n"
+                    except Exception:
+                        pass
+                    continue
+
+                # ── 0.5. Gửi status indicator khi bắt đầu agent mới (xóa dead air) ──
+                if kind == "on_chain_start" and node_name in AGENT_NODES:
+                    if agent_stream_count > 0:
+                        # Đã có agent trước đó xong → gửi separator + status
+                        yield "data: " + json.dumps({"chunk": "\n\n"}) + "\n\n"
+                    status_msg = AGENT_STATUS.get(node_name, "Đang xử lý tiếp...")
+                    yield "data: " + json.dumps({"status": status_msg}) + "\n\n"
+                    print(f"    🔔 [Stream] Agent starting: {node_name}")
+                    continue
+
                 # ── 1. Stream text chunks từ LLM ──
                 if kind == "on_chat_model_stream":
-                    # BỎ QUA output từ supervisor (nó chỉ output tên agent như "sales_agent")
-                    if node_name == "supervisor":
+                    # Bỏ qua output từ các node nội bộ
+                    if node_name in SKIP_NODES:
                         continue
+
+                    # Phát hiện chuyển agent mới → reset tool tracking
+                    if node_name != current_streaming_node and node_name not in SKIP_NODES:
+                        current_streaming_node = node_name
+                        agent_stream_count += 1
+                        tool_was_called = False
+                        tool_finished = False
+                        print(f"    🔀 [Stream] Switched to agent: {node_name}")
 
                     chunk = event["data"]["chunk"]
 
-                    # Bỏ qua tool-calling chunks (LLM quyết định gọi tool, không phải câu trả lời)
+                    # Bỏ qua tool-calling chunks
                     if getattr(chunk, "tool_call_chunks", None):
                         continue
 
@@ -107,13 +157,16 @@ class RAGService:
                     if not content:
                         continue
 
-                    # Nếu agent đã gọi tool nhưng tool chưa xong → đây là LLM đang ra lệnh gọi tool, bỏ qua
+                    # Nếu agent đã gọi tool nhưng tool chưa xong → bỏ qua
                     if tool_was_called and not tool_finished:
                         continue
 
-                    # Lọc bỏ JSON thô bị lọt ra (ví dụ: {"name": "..."})
+                    # Lọc bỏ JSON thô bị lọt ra
                     stripped = content.strip()
                     if stripped.startswith('{"') or stripped.startswith('[{'):
+                        continue
+                    # Lọc bỏ raw tool call fragments bị rò rỉ
+                    if any(tool_name in stripped for tool_name in ["policy_retriever", "check_inventory", "check_order_status"]):
                         continue
 
                     chunk_count += 1
@@ -121,21 +174,12 @@ class RAGService:
                         print(f"    ✍️ [Stream] First chunk received! Streaming started...")
                     yield "data: " + json.dumps({"chunk": content}) + "\n\n"
 
-                # ── 2. Thông báo trạng thái khi tool bắt đầu (gửi riêng, không nối vào text) ──
+                # ── 2. Thông báo trạng thái khi tool bắt đầu ──
                 elif kind == "on_tool_start":
                     tool_was_called = True
                     tool_finished = False
                     tool_name = event.get("name")
-                    status_msg = None
-                    if tool_name == "check_inventory":
-                        status_msg = "Đang kiểm tra kho hàng..."
-                    elif tool_name == "check_order_status":
-                        status_msg = "Đang tra cứu hệ thống..."
-                    elif tool_name == "policy_retriever":
-                        status_msg = "Đang tra cứu chính sách..."
-                    if status_msg:
-                        print(f"    🔧 [Stream] Tool started: {tool_name}")
-                        yield "data: " + json.dumps({"status": status_msg}) + "\n\n"
+                    print(f"    🔧 [Stream] Tool started: {tool_name}")
 
                 # ── 3. Tool kết thúc → cho phép stream LLM output tiếp theo ──
                 elif kind == "on_tool_end":
