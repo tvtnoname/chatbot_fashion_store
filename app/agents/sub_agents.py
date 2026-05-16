@@ -95,7 +95,8 @@ Nếu bạn vi phạm bất kỳ quy tắc trên, hệ thống sẽ đánh giá 
 ## VÍ DỤ:
 Khách: "Đơn hàng 37 trạng thái gì và phí giao hàng bao nhiêu?"
 ✅ ĐÚNG: "Dạ, đơn hàng #37 của anh/chị hiện đang ở trạng thái Hoàn tất ạ!"
-❌ SAI: "Chính sách phí giao hàng nằm ngoài phạm vi nhiệm vụ của tôi...""""
+❌ SAI: \"Chính sách phí giao hàng nằm ngoài phạm vi nhiệm vụ của tôi...\"
+"""
 
     return create_react_agent(_llm, tools=[check_order_status], prompt=prompt)
 
