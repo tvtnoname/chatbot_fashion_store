@@ -86,22 +86,26 @@ class RAGService:
 
         products = []
         chunk_count = 0
-        # Track tool state PER sub-agent (reset khi chuyển agent)
+        # Track tool state PER sub-agent
         tool_was_called = False
         tool_finished = False
         # Track agent hiện tại đang stream
-        current_streaming_node = None
-        # Track xem đã gửi separator giữa các agent chưa
+        current_streaming_agent = None   # Tên agent đang active (ops_agent, support_agent, ...)
+        current_streaming_node = None    # Node name trong on_chat_model_stream
+        # Track xem đã gửi bao nhiêu agent
         agent_stream_count = 0
         # Nodes nội bộ cần bỏ qua khi stream
         SKIP_NODES = {"supervisor", "router_node", "synthesizer_node", "direct_response_node"}
-        # Agent nodes - dùng để gửi status khi chuyển agent
+        # Agent nodes
         AGENT_NODES = {"ops_agent", "sales_agent", "support_agent"}
         AGENT_STATUS = {
             "ops_agent": "Đang tra cứu đơn hàng...",
             "sales_agent": "Đang tìm kiếm sản phẩm...",
             "support_agent": "Đang tra cứu chính sách...",
         }
+        # ── Fallback: lưu response từ on_chain_end của mỗi agent ──
+        agent_responses = {}       # {agent_name: response_text}
+        agents_streamed = set()    # Tên agents đã stream thành công ít nhất 1 chunk
 
         try:
             print(f"    🔄 [Stream] Starting astream_events v2 (Multi-Routing)...")
@@ -123,14 +127,31 @@ class RAGService:
                         pass
                     continue
 
-                # ── 0.5. Gửi status indicator khi bắt đầu agent mới (xóa dead air) ──
+                # ── 0.5. Gửi status indicator khi bắt đầu agent mới ──
                 if kind == "on_chain_start" and node_name in AGENT_NODES:
                     if agent_stream_count > 0:
-                        # Đã có agent trước đó xong → gửi separator + status
                         yield "data: " + json.dumps({"chunk": "\n\n"}) + "\n\n"
+                    current_streaming_agent = node_name
+                    # Reset tool state cho agent mới
+                    tool_was_called = False
+                    tool_finished = False
+                    agent_stream_count += 1
                     status_msg = AGENT_STATUS.get(node_name, "Đang xử lý tiếp...")
                     yield "data: " + json.dumps({"status": status_msg}) + "\n\n"
                     print(f"    🔔 [Stream] Agent starting: {node_name}")
+                    continue
+
+                # ── 0.6. Bắt response đầy đủ từ on_chain_end của agent (FALLBACK) ──
+                if kind == "on_chain_end" and node_name in AGENT_NODES:
+                    try:
+                        output = event.get("data", {}).get("output", {})
+                        if isinstance(output, dict):
+                            responses = output.get("agent_responses", [])
+                            if responses:
+                                agent_responses[node_name] = responses[0]
+                                print(f"    📥 [Fallback] Captured {node_name} response ({len(responses[0])} chars)")
+                    except Exception:
+                        pass
                     continue
 
                 # ── 1. Stream text chunks từ LLM ──
@@ -139,13 +160,10 @@ class RAGService:
                     if node_name in SKIP_NODES:
                         continue
 
-                    # Phát hiện chuyển agent mới → reset tool tracking
-                    if node_name != current_streaming_node and node_name not in SKIP_NODES:
+                    # Phát hiện chuyển node mới → reset streaming node
+                    if node_name != current_streaming_node:
                         current_streaming_node = node_name
-                        agent_stream_count += 1
-                        tool_was_called = False
-                        tool_finished = False
-                        print(f"    🔀 [Stream] Switched to agent: {node_name}")
+                        print(f"    🔀 [Stream] Switched to node: {node_name}")
 
                     chunk = event["data"]["chunk"]
 
@@ -165,25 +183,27 @@ class RAGService:
                     stripped = content.strip()
                     if stripped.startswith('{"') or stripped.startswith('[{'):
                         continue
-                    # Lọc bỏ raw tool call fragments bị rò rỉ
-                    if any(tool_name in stripped for tool_name in ["policy_retriever", "check_inventory", "check_order_status"]):
+                    # Lọc bỏ raw tool call fragments
+                    if any(tn in stripped for tn in ["policy_retriever", "check_inventory", "check_order_status"]):
                         continue
 
                     chunk_count += 1
+                    if current_streaming_agent:
+                        agents_streamed.add(current_streaming_agent)
                     if chunk_count == 1:
                         print(f"    ✍️ [Stream] First chunk received! Streaming started...")
                     yield "data: " + json.dumps({"chunk": content}) + "\n\n"
 
-                # ── 2. Thông báo trạng thái khi tool bắt đầu ──
+                # ── 2. Tool bắt đầu ──
                 elif kind == "on_tool_start":
                     tool_was_called = True
                     tool_finished = False
-                    tool_name = event.get("name")
-                    print(f"    🔧 [Stream] Tool started: {tool_name}")
+                    print(f"    🔧 [Stream] Tool started: {event.get('name')}")
 
-                # ── 3. Tool kết thúc → cho phép stream LLM output tiếp theo ──
+                # ── 3. Tool kết thúc ──
                 elif kind == "on_tool_end":
                     tool_finished = True
+                    print(f"    🔧 [Stream] Tool ended: {event.get('name')}")
                     if event.get("name") == "check_inventory":
                         try:
                             output = event["data"].get("output", "")
@@ -194,7 +214,17 @@ class RAGService:
                         except Exception:
                             pass
 
-            print(f"    ✅ [Stream] Done. Total chunks sent: {chunk_count}")
+            # ── FALLBACK: Gửi bổ sung response của agents bị miss ──
+            for agent_name, response_text in agent_responses.items():
+                if agent_name not in agents_streamed and response_text:
+                    print(f"    🔄 [Fallback] Sending missed {agent_name} response")
+                    # Gửi separator nếu đã có content trước đó
+                    if chunk_count > 0:
+                        yield "data: " + json.dumps({"chunk": "\n\n"}) + "\n\n"
+                    yield "data: " + json.dumps({"chunk": response_text}) + "\n\n"
+                    chunk_count += 1
+
+            print(f"    ✅ [Stream] Done. Total chunks sent: {chunk_count}, streamed_agents={agents_streamed}, fallback_agents={set(agent_responses.keys()) - agents_streamed}")
             yield "data: " + json.dumps({
                 "thread_id": tid,
                 "products": products,
