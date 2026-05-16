@@ -66,6 +66,17 @@ def warm_inventory_cache():
     thread = threading.Thread(target=_warm, daemon=True)
     thread.start()
 
+STATUS_MAP = {
+    "PENDING": "Đang chờ xử lý",
+    "PAID": "Đã thanh toán",
+    "PROCESSING": "Đang chuẩn bị hàng",
+    "SHIPPED": "Đang giao hàng",
+    "DELIVERED": "Đã giao",
+    "COMPLETED": "Hoàn tất",
+    "CANCELLED": "Đã hủy",
+    "REFUNDED": "Đã hoàn tiền"
+}
+
 def warm_order_cache(user_id: str):
     """Pre-fetch đơn hàng của một user cụ thể vào cache.
     Vì dữ liệu đơn hàng gắn với user, ta không thể warm lúc startup.
@@ -93,10 +104,12 @@ def warm_order_cache(user_id: str):
                 orders = data.get("data", [])
                 if isinstance(orders, dict):
                     orders = [orders]
-                output = []
+                output = ["Danh sách đơn hàng (đơn mới nhất xếp trên cùng):"]
                 for order in orders:
-                    output.append(f"Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái hiện tại: {order.get('status')}. Tổng tiền: {order.get('total_amount')}đ.")
-                result = "\n".join(output) if output else "Không tìm thấy đơn hàng."
+                    raw_status = str(order.get('status', '')).upper()
+                    vn_status = STATUS_MAP.get(raw_status, raw_status)
+                    output.append(f"- Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái: {vn_status}. Tổng tiền: {order.get('total_amount')}đ.")
+                result = "\n".join(output) if len(output) > 1 else "Không tìm thấy đơn hàng."
             else:
                 result = data.get("message", "Không tìm thấy đơn hàng.")
                 
@@ -192,10 +205,12 @@ def check_order_status(user_id: str, order_id: Optional[str] = None) -> str:
             orders = data.get("data", [])
             if isinstance(orders, dict):
                 orders = [orders]
-            output = []
+            output = ["Danh sách đơn hàng (đơn mới nhất xếp trên cùng):"]
             for order in orders:
-                output.append(f"Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái hiện tại: {order.get('status')}. Tổng tiền: {order.get('total_amount')}đ.")
-            result = "\n".join(output) if output else "Không tìm thấy đơn hàng."
+                raw_status = str(order.get('status', '')).upper()
+                vn_status = STATUS_MAP.get(raw_status, raw_status)
+                output.append(f"- Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái: {vn_status}. Tổng tiền: {order.get('total_amount')}đ.")
+            result = "\n".join(output) if len(output) > 1 else "Không tìm thấy đơn hàng."
         else:
             result = data.get("message", "Không tìm thấy đơn hàng.")
     except Exception as e:
