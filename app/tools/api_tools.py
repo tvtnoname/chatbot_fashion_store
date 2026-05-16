@@ -164,11 +164,11 @@ def check_inventory(query: str, size: Optional[str] = None, color: Optional[str]
     return result
 
 @tool
-def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
-    """Tra cứu trạng thái đơn hàng của khách hàng. Yêu cầu truyền đúng user_id. Truyền order_id nếu khách muốn hỏi một đơn cụ thể."""
+def check_order_status(user_id: str, order_id: str = "") -> str:
+    """Tra cứu trạng thái đơn hàng của khách hàng. Bắt buộc truyền user_id. Truyền order_id nếu khách muốn hỏi một đơn cụ thể."""
     # ── Validate & convert user_id ──
     try:
-        uid = int(user_id)
+        uid = int(str(user_id).strip())
     except (ValueError, TypeError):
         print(f"    ⚠️ [Tool] Invalid user_id: {user_id}")
         return "Khách hàng chưa đăng nhập. Vui lòng đăng nhập để kiểm tra đơn hàng."
@@ -178,9 +178,9 @@ def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
 
     # ── Validate & convert order_id (nếu có) ──
     oid = None
-    if order_id:
+    if order_id and str(order_id).strip():
         try:
-            oid = int(order_id)
+            oid = int(str(order_id).strip())
         except (ValueError, TypeError):
             oid = None
 
