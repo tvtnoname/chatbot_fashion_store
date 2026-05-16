@@ -42,16 +42,15 @@ def build_multi_agent_graph():
     def _sanitize_output(content: str) -> str:
         """Nếu AI output JSON thô hoặc raw tool call thay vì câu văn, lọc bỏ phần bị lỗi."""
         stripped = content.strip()
-        # Pattern 1: JSON tool call chuẩn
+        # Pattern 1: JSON tool call chuẩn → bỏ qua hoàn toàn
         if '{"name":' in stripped and '"parameters":' in stripped:
-            return "Dạ, hệ thống đang xử lý yêu cầu của anh/chị nhưng gặp trục trặc nhỏ. Anh/chị vui lòng thử lại câu hỏi nhé! 🙏"
+            return ""
         # Pattern 2: JSON tool call bị malformed (thiếu dấu {, bị cắt)
         tool_names = ["policy_retriever", "check_inventory", "check_order_status"]
         for tool_name in tool_names:
             if f'"{tool_name}"' in stripped and '"parameters"' in stripped:
                 # Cố gắng giữ lại phần text trước đoạn JSON bị lỗi
                 idx = stripped.find(f'"{tool_name}"')
-                # Tìm ngược lại để tìm điểm bắt đầu JSON
                 search_start = max(0, idx - 50)
                 for marker in ['{"name"', '{"', 'name":', '{']:
                     pos = stripped.find(marker, search_start)
@@ -60,7 +59,7 @@ def build_multi_agent_graph():
                         if clean:
                             return clean
                         break
-                return "Dạ, hệ thống đang xử lý yêu cầu của anh/chị nhưng gặp trục trặc nhỏ. Anh/chị vui lòng thử lại câu hỏi nhé! 🙏"
+                return ""
         return content
 
     # ══════════════════════════════════════════════════
@@ -143,9 +142,17 @@ def build_multi_agent_graph():
                 content="Dạ, hệ thống chưa nhận được kết quả. Anh/chị vui lòng thử lại nhé! 🙏"
             )]}
 
-        if len(responses) == 1:
+        # Lọc bỏ responses rỗng (do _sanitize_output trả về "")
+        valid = [(i, r) for i, r in enumerate(responses) if r and r.strip()]
+
+        if len(valid) == 0:
+            return {"messages": [AIMessage(
+                content="Dạ, hệ thống chưa nhận được kết quả. Anh/chị vui lòng thử lại nhé! 🙏"
+            )]}
+
+        if len(valid) == 1:
             # Câu đơn - không cần merge
-            return {"messages": [AIMessage(content=responses[0])]}
+            return {"messages": [AIMessage(content=valid[0][1])]}
 
         # Câu kép - merge bằng template
         agent_labels = {
@@ -155,7 +162,7 @@ def build_multi_agent_graph():
         }
 
         parts = []
-        for i, resp in enumerate(responses):
+        for i, resp in valid:
             label = agent_labels.get(pending[i], "") if i < len(pending) else ""
             parts.append(f"{label}\n{resp}" if label else resp)
 
