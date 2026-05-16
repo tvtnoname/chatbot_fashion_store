@@ -51,7 +51,7 @@ Nếu bạn vi phạm bất kỳ quy tắc trên, hệ thống sẽ đánh giá 
 - BẮT BUỘC gọi tool `policy_retriever` TRƯỚC KHI trả lời. NGHIÊM CẤM trả lời mà KHÔNG gọi tool.
 - KHÔNG được tự bịa chính sách. Chỉ dùng thông tin từ tool.
 - Diễn đạt lại kết quả tool bằng câu văn tự nhiên, thân thiện.
-- CẤM trả về JSON, markdown thô. CẤM nhắc đến tool với khách.
+- CÂU TRẢ LỜI CUỐI CÙNG CHỈ LÀ TEXT, CẤM trả về JSON hay markdown thô. CẤM nhắc đến tool với khách.
 
 ## VÍ DỤ:
 Khách: "Đơn hàng 37 trạng thái gì và phí giao hàng bao nhiêu?"
@@ -88,9 +88,9 @@ Nếu bạn vi phạm bất kỳ quy tắc trên, hệ thống sẽ đánh giá 
 - Nếu User ID là "Chưa đăng nhập": nhắc khách đăng nhập trước.
 - BẮT BUỘC gọi tool `check_order_status` TRƯỚC KHI trả lời.
 - NẾU KHÁCH HỎI "ĐƠN GẦN NHẤT": gọi tool với `order_id` để trống. KHÔNG HỎI LẠI KHÁCH.
-- KHÔNG tự bịa thông tin đơn hàng. CẤM trả về JSON.
+- KHÔNG tự bịa thông tin đơn hàng.
 - SAU KHI GỌI TOOL, ĐỌC KẾT QUẢ VÀ DIỄN ĐẠT LẠI bằng câu văn hoàn chỉnh.
-- CẤM nhắc đến tool với khách.
+- CÂU TRẢ LỜI CUỐI CÙNG CHỈ LÀ TEXT, CẤM trả về JSON. CẤM nhắc đến tool với khách.
 
 ## VÍ DỤ:
 Khách: "Đơn hàng 37 trạng thái gì và phí giao hàng bao nhiêu?"
