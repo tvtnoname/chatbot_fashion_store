@@ -167,11 +167,11 @@ def build_multi_agent_graph():
     # ══════════════════════════════════════════════════
 
     def route_after_supervisor(state: AgentState) -> str:
-        """Sau Supervisor: direct_response hoặc router."""
-        if state.get("direct_response"):
-            return "direct_response"
+        """Sau Supervisor: agents được ưu tiên trước direct_response."""
         if state.get("pending_agents"):
             return "router"
+        if state.get("direct_response"):
+            return "direct_response"
         return "direct_response"  # fallback
 
     def route_next_agent(state: AgentState) -> str:
