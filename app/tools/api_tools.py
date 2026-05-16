@@ -56,21 +56,36 @@ def check_inventory(query: str, size: Optional[str] = None, color: Optional[str]
     return result
 
 @tool
-def check_order_status(user_id: int, order_id: Optional[int] = None) -> str:
-    """Tra cứu trạng thái đơn hàng của khách hàng. Yêu cầu truyền đúng user_id. Truyền order_id nếu khách muốn hỏi một đơn cụ thể."""
-    if not user_id:
-        return "Yêu cầu đăng nhập để kiểm tra đơn hàng."
+def check_order_status(user_id: str, order_id: Optional[str] = None) -> str:
+    """Tra cứu trạng thái đơn hàng của khách hàng. Yêu cầu truyền đúng user_id (số nguyên). Truyền order_id nếu khách muốn hỏi một đơn cụ thể."""
+    # ── Validate & convert user_id ──
+    try:
+        uid = int(user_id)
+    except (ValueError, TypeError):
+        print(f"    ⚠️ [Tool] Invalid user_id: {user_id}")
+        return "Khách hàng chưa đăng nhập. Vui lòng đăng nhập để kiểm tra đơn hàng."
+
+    if uid <= 0:
+        return "Khách hàng chưa đăng nhập. Vui lòng đăng nhập để kiểm tra đơn hàng."
+
+    # ── Validate & convert order_id (nếu có) ──
+    oid = None
+    if order_id:
+        try:
+            oid = int(order_id)
+        except (ValueError, TypeError):
+            oid = None
 
     # ── Cache thủ công ──
-    cache_key = (user_id, order_id)
+    cache_key = (uid, oid)
     if cache_key in order_cache:
         print(f"    ⚡ [Cache HIT] order: {cache_key}")
         return order_cache[cache_key]
     print(f"    🌐 [Cache MISS] order: {cache_key} → gọi API...")
 
-    params = {"user_id": user_id}
-    if order_id:
-        params["order_id"] = order_id
+    params = {"user_id": uid}
+    if oid:
+        params["order_id"] = oid
         
     try:
         t0 = time.time()
