@@ -66,6 +66,44 @@ def warm_inventory_cache():
     thread = threading.Thread(target=_warm, daemon=True)
     thread.start()
 
+def warm_order_cache(user_id: str):
+    """Pre-fetch đơn hàng của một user cụ thể vào cache.
+    Vì dữ liệu đơn hàng gắn với user, ta không thể warm lúc startup.
+    Thay vào đó, gọi hàm này chạy ngầm ngay khi user gửi tin nhắn đến chatbot."""
+    if not user_id or str(user_id) == "Chưa đăng nhập":
+        return
+
+    import threading
+    def _warm():
+        try:
+            uid = int(user_id)
+            if uid <= 0:
+                return
+            
+            cache_key = (uid, None)
+            if cache_key in order_cache:
+                return  # Đã có cache gần đây
+                
+            print(f"    🔥 [Order Warm] Đang tải trước đơn hàng cho user {uid}...")
+            params = {"user_id": uid}
+            res = requests.get(f"{MAIN_BE_URL}/orders", params=params, timeout=10)
+            data = res.json()
+            
+            if data.get("status") == "success":
+                order = data.get("data", {})
+                result = f"Đơn hàng #{order.get('order_id')} tạo lúc {order.get('created_at')}. Trạng thái hiện tại: {order.get('status')}. Tổng tiền: {order.get('total_amount')}đ."
+            else:
+                result = data.get("message", "Không tìm thấy đơn hàng.")
+                
+            order_cache[cache_key] = result
+            print(f"    ✅ [Order Warm] Đã cache đơn hàng cho user {uid}")
+        except Exception as e:
+            print(f"    ❌ [Order Warm] Lỗi khi tải trước đơn hàng user {user_id}: {e}")
+
+    # Chạy trên background thread để không chặn luồng chat chính
+    thread = threading.Thread(target=_warm, daemon=True)
+    thread.start()
+
 @tool
 def check_inventory(query: str, size: Optional[str] = None, color: Optional[str] = None) -> str:
     """Tra cứu tồn kho thực tế của sản phẩm dựa vào tên hoặc SKU, size, color."""
