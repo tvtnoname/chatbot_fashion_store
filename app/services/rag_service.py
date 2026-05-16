@@ -200,7 +200,7 @@ class RAGService:
                     tool_finished = False
                     print(f"    🔧 [Stream] Tool started: {event.get('name')}")
 
-                # ── 3. Tool kết thúc ──
+                # ── 3. Tool kết thúc (thành công hoặc lỗi) ──
                 elif kind == "on_tool_end":
                     tool_finished = True
                     print(f"    🔧 [Stream] Tool ended: {event.get('name')}")
@@ -213,6 +213,10 @@ class RAGService:
                             print(f"    🛒 [Stream] Got {len(products)} products from tool")
                         except Exception:
                             pass
+
+                elif kind == "on_tool_error":
+                    tool_finished = True
+                    print(f"    ❌ [Stream] Tool error: {event.get('name')}")
 
             # ── FALLBACK: Gửi bổ sung response của agents bị miss ──
             for agent_name, response_text in agent_responses.items():
